@@ -5,15 +5,15 @@
   "description": "Learning signals by rebuilding from scratch",
   "main": "src/index.js",
   "scripts": {
-    "test": "node --test tests/*.test.js",
-    "test:watch": "node --test --watch tests/*.test.js",
+    "test": "vitest",
+    "test:watch": "vitest --watch",
     "benchmark": "node benchmarks/performance.js"
   },
   "keywords": ["signals", "reactive", "state-management"],
   "author": "Learning Project",
   "license": "MIT",
   "devDependencies": {
-    "node:test": "*",
-    "node:assert": "*"
+    "vitest": "^1.0.0",
+    "@types/node": "^20.0.0"
   }
 }

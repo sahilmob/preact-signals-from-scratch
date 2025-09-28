@@ -56,9 +56,14 @@ export class Signal<T = any> {
     // TODO: Add callback to _subscribers array
     this._subscribers.add(callback);
     // TODO: Immediately call callback with current value (matches Preact behavior)
-    callback(this._value);
+    try {
+      callback(this._value);
+      return () => this._subscribers.delete(callback);
+    } catch (e) {
+      console.log(e);
+      return () => null;
+    }
     // TODO: Return function that removes callback from _subscribers array
-    return () => this._subscribers.delete(callback);
   }
 
   /**
