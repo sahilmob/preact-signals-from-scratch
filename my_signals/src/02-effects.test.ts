@@ -74,7 +74,9 @@ describe("Phase 2: Effects System", () => {
     });
 
     it("should execute function immediately on creation", () => {
-      // TODO: Test that effect function runs once during construction
+      const cb = vi.fn();
+      effect(cb);
+      expect(cb).toHaveBeenCalledOnce();
     });
 
     it("should set evalContext during execution", () => {
@@ -82,23 +84,68 @@ describe("Phase 2: Effects System", () => {
     });
 
     it("should restore previous evalContext after execution", () => {
-      // TODO: Test that evalContext is properly restored (for nested effects)
+      let originalContext = evalContext;
+      let ctx1;
+      let ctx2;
+      let effect1;
+      let effect2;
+      effect(function () {
+        ctx1 = evalContext;
+        effect1 = this as Effect;
+        effect(function () {
+          ctx2 = evalContext;
+          effect2 = this as Effect;
+        });
+      });
+      expect(evalContext).toEqual(originalContext);
+      expect(ctx1).toEqual(effect1);
+      expect(ctx2).toEqual(effect2);
     });
 
     it("should track dependencies automatically", () => {
-      // TODO: Test that signals accessed during effect execution are tracked
+      const signal = new ReactiveSignal(42);
+      let effect1;
+      effect(function () {
+        console.log(signal.value);
+        effect1 = this;
+      });
+
+      expect((effect1 as any)._dependencies).contains(signal);
     });
 
     it("should re-run when dependencies change", () => {
-      // TODO: Test that effect executes again when dependency signals change
+      const signal = new ReactiveSignal(42);
+      const cb = vi.fn().mockImplementation(() => console.log(signal.value));
+      effect(cb);
+      signal.value = 43;
+      setTimeout(() => {
+        expect(cb).toHaveBeenCalledTimes(2);
+      });
     });
 
     it("should handle cleanup functions", () => {
-      // TODO: Test that cleanup functions are called before re-execution
+      const cleanup = vi.fn();
+      const signal = new ReactiveSignal(42);
+      const cb = vi.fn().mockImplementation(() => {
+        console.log(signal.value);
+        return cleanup;
+      });
+      effect(cb);
+      signal.value = 43;
+      setTimeout(() => {
+        expect(cleanup).toHaveBeenCalledOnce();
+      });
     });
 
     it("should dispose properly", () => {
-      // TODO: Test that dispose() stops future executions and cleans up resources
+      const signal = new ReactiveSignal(42);
+      const cb = vi.fn().mockImplementation(() => console.log(signal.value));
+      const dispose = effect(cb);
+      dispose();
+      signal.value = 43;
+      setTimeout(() => {
+        expect(cb).toHaveBeenCalledTimes(1);
+      });
     });
   });
 
