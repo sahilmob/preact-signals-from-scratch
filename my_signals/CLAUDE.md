@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is an educational project that rebuilds the Preact Signals reactive state management library from scratch. The goal is to understand the core concepts and design patterns behind reactive systems through incremental implementation.
+This is an educational project that **incrementally replicates the Preact Signals reactive state management library from scratch** for learning purposes. We are NOT the authors of Preact Signals - this is a learning exercise to understand the core concepts and design patterns behind reactive systems by rebuilding them step-by-step.
+
+**Important**: This project studies and replicates the open-source Preact Signals library (MIT licensed) for educational purposes. All credit for the original design and implementation goes to the Preact team.
 
 ## Development Commands
 
@@ -70,9 +72,17 @@ Each phase includes a `demonstrate*()` function that serves as both documentatio
 
 ## Reference Implementation
 
-The `signals/` directory contains the original Preact Signals implementation for comparison. Key files to reference:
-- `signals/packages/core/src/index.ts` - Complete implementation
+The `signals/` directory contains the **original Preact Signals implementation** (added as a Git submodule) that we use as our learning reference. This is the actual production code we're studying and replicating for educational purposes.
+
+Key files to reference:
+- `signals/packages/core/src/index.ts` - Complete production implementation
 - `signals/packages/core/test/` - Comprehensive test suite
+- Compare our learning implementations in `my_signals/src/` against the reference
+
+**Note**: To access the reference implementation after cloning:
+```bash
+git submodule update --init --recursive
+```
 
 ## Development Workflow
 
