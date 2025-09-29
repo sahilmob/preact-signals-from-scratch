@@ -19,7 +19,7 @@ import {
   effect,
   evalContext,
 } from "./02-effects.ts";
-import { Signal } from "./01-basic-signal.ts";
+import { signal, Signal } from "./01-basic-signal.ts";
 
 describe("Phase 2: Effects System", () => {
   describe("ReactiveSignal Class", () => {
@@ -151,11 +151,40 @@ describe("Phase 2: Effects System", () => {
 
   describe("Automatic Dependency Tracking", () => {
     it("should track single dependency", () => {
-      // TODO: Test effect with one signal dependency
+      const signal = new ReactiveSignal(42);
+      const cb = vi.fn().mockImplementation(() => {
+        signal.value;
+      });
+      effect(cb);
+
+      signal.value = 43;
+
+      setTimeout(() => {
+        expect(cb).toHaveBeenCalledTimes(2);
+      });
     });
 
-    it("should track multiple dependencies", () => {
-      // TODO: Test effect with multiple signal dependencies
+    it("should track multiple dependencies", async () => {
+      const s = new ReactiveSignal(42);
+      const s1 = new ReactiveSignal(43);
+      const s2 = new ReactiveSignal(44);
+      const cb = vi.fn().mockImplementation(() => {
+        s.value + s1.value + s2.value;
+      });
+      effect(cb);
+
+      s.value = 43;
+      s1.value = 44;
+      await new Promise((res, _) =>
+        setTimeout(() => {
+          s1.value = 45;
+          res(null);
+        }, 100)
+      );
+
+      setTimeout(() => {
+        expect(cb).toHaveBeenCalledTimes(3);
+      });
     });
 
     it("should update dependencies on re-execution", () => {
@@ -163,7 +192,25 @@ describe("Phase 2: Effects System", () => {
     });
 
     it("should handle conditional dependencies", () => {
-      // TODO: Test effects that access different signals based on conditions
+      let count = 0;
+      const s1 = reactiveSignal(42);
+      const s2 = reactiveSignal(43);
+      let result;
+
+      effect(() => {
+        if (count % 2 === 0) {
+          result = s1.value;
+        } else {
+          result = s2.value;
+        }
+      });
+
+      count += 1;
+      s1.value = 44;
+
+      setTimeout(() => {
+        expect(result).toBe(43);
+      });
     });
 
     it("should work with nested signal access", () => {
@@ -173,11 +220,31 @@ describe("Phase 2: Effects System", () => {
 
   describe("Effect Re-execution", () => {
     it("should re-execute when any dependency changes", () => {
-      // TODO: Test that changing any tracked signal triggers re-execution
+      const signal = new ReactiveSignal(42);
+      const cb = vi.fn().mockImplementation(() => {
+        console.log(signal.value);
+      });
+      effect(cb);
+
+      signal.value = 43;
+
+      setTimeout(() => {
+        expect(cb).toHaveBeenCalledTimes(2);
+      });
     });
 
     it("should use deferred execution to prevent infinite loops", () => {
-      // TODO: Test that effects don't cause infinite loops with setTimeout
+      const signal = new ReactiveSignal(42);
+      const cb = vi.fn().mockImplementation(() => {
+        signal.value;
+      });
+      effect(cb);
+
+      signal.value = 43;
+
+      setTimeout(() => {
+        expect(cb).toHaveBeenCalledTimes(2);
+      });
     });
 
     it("should handle pending state correctly", () => {
@@ -185,11 +252,34 @@ describe("Phase 2: Effects System", () => {
     });
 
     it("should call cleanup before re-execution", () => {
-      // TODO: Test that cleanup happens before each re-run
+      const calls: string[] = [];
+      const cleanup = vi.fn().mockImplementation(() => {
+        calls.push("cleanup");
+      });
+      const signal = new ReactiveSignal(42);
+      const cb = vi.fn().mockImplementation(() => {
+        console.log(signal.value);
+        calls.push("run");
+        return cleanup;
+      });
+      effect(cb);
+      signal.value = 43;
+      setTimeout(() => {
+        expect(calls).toEqual(["run", "cleanup", "run"]);
+      });
     });
 
     it("should handle errors in effect functions", () => {
-      // TODO: Test that errors in effects are handled gracefully
+      const signal = new ReactiveSignal(42);
+      const cb = vi.fn().mockImplementation(() => {
+        signal.value;
+        throw Error("Must be handled in Effect");
+      });
+
+      effect(cb);
+
+      signal.value = 43;
+      expect(signal.value).toEqual(43);
     });
   });
 
