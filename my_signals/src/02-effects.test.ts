@@ -175,16 +175,10 @@ describe("Phase 2: Effects System", () => {
 
       s.value = 43;
       s1.value = 44;
-      await new Promise((res, _) =>
-        setTimeout(() => {
-          s1.value = 45;
-          res(null);
-        }, 100)
-      );
+      s1.value = 45;
+      await new Promise((res, _) => setTimeout(res));
 
-      setTimeout(() => {
-        expect(cb).toHaveBeenCalledTimes(3);
-      });
+      expect(cb).toHaveBeenCalledTimes(4);
     });
 
     it("should update dependencies on re-execution", () => {

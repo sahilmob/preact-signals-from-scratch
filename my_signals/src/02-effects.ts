@@ -102,16 +102,16 @@ export class Effect {
       console.log("❌ Effect is disposed, ignoring dependency change");
       return;
     }
-    if (this._isPending) {
-      console.log("⏳ Effect already pending, skipping");
-      return;
-    }
+    // if (this._isPending) {
+    //   console.log("⏳ Effect already pending, skipping");
+    //   return;
+    // }
     // TODO: This is called when one of our dependency signals changes
     // TODO: Use setTimeout to defer execution and avoid infinite loops during signal updates
-    this._isPending = true;
+    // this._isPending = true;
     setTimeout(() => {
       if (!this._isDisposed) {
-        this._isPending = false;
+        // this._isPending = false;
         this._run();
       }
     }, 0);
