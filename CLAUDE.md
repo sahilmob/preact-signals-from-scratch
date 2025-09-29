@@ -135,8 +135,19 @@ This ensures the learner writes the code themselves while getting appropriate gu
 - Error handling verification
 - Edge case coverage including nested effects and conditional dependencies
 
-### 🔄 Next: Phase 3: Computed Signals
-Ready to implement lazy evaluation and derived state computations.
+### 🔄 Phase 3: Computed Signals (READY FOR IMPLEMENTATION)
+**Skeleton Created** - Ready to implement lazy evaluation and derived state computations.
+
+**Key Features Designed**:
+- `ComputedSignal<T>` class extending `ReactiveSignal`
+- Lazy evaluation with caching and invalidation
+- State management (`FRESH`, `STALE`, `COMPUTING`, `ERROR`)
+- Cycle detection for circular dependencies
+- Integration with existing effect system
+- Comprehensive test suite with 60+ test scenarios
+
+### 🔄 Next: Complete Phase 3 Implementation
+Ready to fill in the TODO comments and build computed signals.
 
 ## Key Learnings So Far
 
