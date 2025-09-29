@@ -33,7 +33,7 @@ export class Effect {
   // TODO: Add private _cleanup property to store optional cleanup function returned by _fn
   private _cleanup?: Function;
   // TODO: Add private _dependencies property to store Set of signals this effect depends on
-  private _dependencies: Set<Signal<any>>;
+  // private _dependencies: Set<Signal<any>>;
   // TODO: Add private _isDisposed property to track if effect is disposed
   private _isDisposed: boolean;
   private _unsubscribeFunctions: Set<() => void>;
@@ -45,7 +45,7 @@ export class Effect {
     // TODO: Initialize _cleanup as undefined
     this._cleanup = undefined;
     // TODO: Initialize _dependencies as empty Set<Signal<any>>
-    this._dependencies = new Set();
+    // this._dependencies = new Set();
     // TODO: Initialize _isDisposed as false
     this._isDisposed = false;
     this._unsubscribeFunctions = new Set();
@@ -74,7 +74,7 @@ export class Effect {
     this._unsubscribeFunctions.forEach((unsub) => unsub());
     this._unsubscribeFunctions.clear();
     // - Clear the _dependencies Set
-    this._dependencies.clear();
+    // this._dependencies.clear();
     // TODO: Set up new run:
     // - Store the previous evalContext (could be another effect)
     const prevContext = evalContext;
@@ -120,7 +120,7 @@ export class Effect {
 
   addDependency(signal: ReactiveSignal<any>): void {
     console.log("➕ Adding dependency");
-    this._dependencies.add(signal);
+    // this._dependencies.add(signal);
     // Subscribe to the signal and store the unsubscribe function
     const unsubscribe = signal.subscribeEffect(this);
     this._unsubscribeFunctions.add(unsubscribe);
@@ -136,7 +136,7 @@ export class Effect {
     this._unsubscribeFunctions.forEach((unsub) => unsub());
     this._unsubscribeFunctions.clear();
     // TODO: Clear _dependencies Set
-    this._dependencies.clear();
+    // this._dependencies.clear();
     // TODO: Set _fn and _cleanup to undefined to free memory
     this._fn = undefined;
     this._cleanup = undefined;

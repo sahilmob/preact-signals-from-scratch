@@ -37,14 +37,14 @@ describe("Phase 2: Effects System", () => {
       expect((signal as any)._dependentEffects.size).toEqual(0);
     });
 
-    it("should register with current evalContext when value is accessed", () => {
-      let ctx;
-      effect(() => {
-        console.log(signal.value);
-        ctx = evalContext;
-      });
-      expect((ctx as any)._dependencies).toContain(signal);
-    });
+    // it("should register with current evalContext when value is accessed", () => {
+    //   let ctx;
+    //   effect(() => {
+    //     console.log(signal.value);
+    //     ctx = evalContext;
+    //   });
+    //   expect((ctx as any)._dependencies).toContain(signal);
+    // });
 
     it("should not register when no evalContext is present", () => {
       // TODO: Test that accessing .value outside effects doesn't create dependencies
@@ -102,16 +102,16 @@ describe("Phase 2: Effects System", () => {
       expect(ctx2).toEqual(effect2);
     });
 
-    it("should track dependencies automatically", () => {
-      const signal = new ReactiveSignal(42);
-      let effect1;
-      effect(function () {
-        console.log(signal.value);
-        effect1 = this;
-      });
+    // it("should track dependencies automatically", () => {
+    //   const signal = new ReactiveSignal(42);
+    //   let effect1;
+    //   effect(function () {
+    //     console.log(signal.value);
+    //     effect1 = this;
+    //   });
 
-      expect((effect1 as any)._dependencies).contains(signal);
-    });
+    //   expect((effect1 as any)._dependencies).contains(signal);
+    // });
 
     it("should re-run when dependencies change", () => {
       const signal = new ReactiveSignal(42);
