@@ -285,37 +285,104 @@ describe("Phase 2: Effects System", () => {
 
   describe("Multiple Effects", () => {
     it("should allow multiple effects on same signal", () => {
-      // TODO: Test that multiple effects can depend on same signal
+      const signal = new ReactiveSignal(42);
+      const cb1 = vi.fn().mockImplementation(() => {
+        signal.value;
+      });
+      const cb2 = vi.fn().mockImplementation(() => {
+        signal.value;
+      });
+      effect(cb1);
+      effect(cb2);
+
+      expect(cb1).toHaveBeenCalledOnce();
+      expect(cb2).toHaveBeenCalledOnce();
     });
 
     it("should notify all dependent effects", () => {
-      // TODO: Test that signal changes trigger all dependent effects
+      const signal = new ReactiveSignal(42);
+      const cb1 = vi.fn().mockImplementation(() => {
+        signal.value;
+      });
+      const cb2 = vi.fn().mockImplementation(() => {
+        signal.value;
+      });
+      effect(cb1);
+      effect(cb2);
+
+      expect(cb1).toHaveBeenCalledOnce();
+      expect(cb2).toHaveBeenCalledOnce();
     });
 
     it("should handle nested effects", () => {
-      // TODO: Test effects that create other effects
+      const signal = new ReactiveSignal(42);
+
+      const cb2 = vi.fn().mockImplementation(() => {
+        signal.value;
+      });
+      const cb1 = vi.fn().mockImplementation(() => {
+        signal.value;
+        effect(cb2);
+      });
+      effect(cb1);
+
+      expect(cb1).toHaveBeenCalledOnce();
+      expect(cb2).toHaveBeenCalledOnce();
     });
 
     it("should maintain independent effect lifecycles", () => {
-      // TODO: Test that disposing one effect doesn't affect others
+      const signal = new ReactiveSignal(42);
+      const cb1 = vi.fn().mockImplementation(() => {
+        signal.value;
+      });
+      const cb2 = vi.fn().mockImplementation(() => {
+        signal.value;
+      });
+      effect(cb1);
+      const dispose = effect(cb2);
+      dispose();
+
+      signal.value = 43;
+
+      setTimeout(() => {
+        expect(cb1).toHaveBeenCalledTimes(2);
+        expect(cb2).toHaveBeenCalledOnce();
+      });
     });
   });
 
   describe("Effect Factory Function", () => {
     it("should create and return dispose function", () => {
-      // TODO: Test effect() factory function returns dispose function
+      expect(effect(() => {})).toBeInstanceOf(Function);
     });
 
     it("should execute effect immediately", () => {
-      // TODO: Test that effect() runs the function immediately
+      const cb = vi.fn();
+
+      effect(cb);
+      expect(cb).toHaveBeenCalledOnce();
     });
 
     it("should handle effect without cleanup", () => {
-      // TODO: Test effects that don't return cleanup functions
+      const cb = vi.fn();
+
+      effect(cb);
+      expect(cb).toHaveBeenCalledOnce();
     });
 
     it("should handle effect with cleanup", () => {
-      // TODO: Test effects that return cleanup functions
+      const cleanup = vi.fn();
+      const signal = reactiveSignal(42);
+      const cb = vi.fn().mockImplementation(() => {
+        signal.value;
+        return cleanup;
+      });
+
+      effect(cb);
+      signal.value = 43;
+      setTimeout(() => {
+        expect(cleanup).toHaveBeenCalledOnce();
+      });
     });
   });
 
