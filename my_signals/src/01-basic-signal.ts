@@ -147,4 +147,4 @@ export function demonstrateBasicSignal(): void {
   // This will help you validate that your implementation is correct
 }
 
-demonstrateBasicSignal();
+// demonstrateBasicSignal();

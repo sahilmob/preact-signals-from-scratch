@@ -6,3 +6,4 @@ effect(() => {
 });
 
 signal.value = 43;
+signal.value = 44;

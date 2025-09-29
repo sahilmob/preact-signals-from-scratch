@@ -112,19 +112,12 @@ export class Effect {
     if (!this._isDisposed) {
       // this._isPending = false;
       this._run();
-      queueMicrotask(() => {});
     }
-    // setTimeout(() => {
-    //   if (!this._isDisposed) {
-    //     // this._isPending = false;
-    //     this._run();
-    //   }
-    // }, 0);
     // TODO: Later in Phase 5 (batching), this will be more sophisticated
   }
 
   addDependency(signal: ReactiveSignal<any>): void {
-    console.log("➕ Adding dependency");
+    console.log("➕ Adding dependency", signal);
     // this._dependencies.add(signal);
     // Subscribe to the signal and store the unsubscribe function
     const unsubscribe = signal.subscribeEffect(this);
@@ -168,6 +161,7 @@ export class ReactiveSignal<T = any> extends Signal<T> {
       console.log("🎯 EvalContext exists, adding dependency");
       // TODO: If yes, register this signal as a dependency:
       //   - Add this signal to the effect's _dependencies
+      const ctx = evalContext;
       evalContext.addDependency(this);
       //   - Add the effect to this signal's _dependentEffects
       //   - Subscribe the effect to changes on this signal
@@ -176,7 +170,7 @@ export class ReactiveSignal<T = any> extends Signal<T> {
     }
 
     // TODO: Return the actual value (call parent getter or access _value)
-    return super.value;
+    return this._value;
   }
 
   set value(newValue: T) {
@@ -188,7 +182,7 @@ export class ReactiveSignal<T = any> extends Signal<T> {
     // Set the value directly
     this._value = newValue;
 
-    // Notify regular subscribers from parent class
+    // // Notify regular subscribers from parent class
     this._subscribers.forEach((callback) => {
       try {
         callback(newValue);
@@ -203,7 +197,9 @@ export class ReactiveSignal<T = any> extends Signal<T> {
       this._dependentEffects.size,
       "dependent effects"
     );
-    // this._dependentEffects.forEach((effect) => effect.onDependencyChange());
+    [...this._dependentEffects].forEach((effect) =>
+      effect.onDependencyChange()
+    );
   }
 
   // TODO: Add method to subscribe an effect to this signal
@@ -218,12 +214,12 @@ export class ReactiveSignal<T = any> extends Signal<T> {
     };
   }
 
-  // TODO: Override subscribe method to handle both regular subscribers AND effects
-  subscribe(callback: (value: T) => void): () => void {
-    // TODO: Call parent subscribe method
-    return super.subscribe(callback);
-    // TODO: Return the unsubscribe function from parent
-  }
+  // // TODO: Override subscribe method to handle both regular subscribers AND effects
+  // subscribe(callback: (value: T) => void): () => void {
+  //   // TODO: Call parent subscribe method
+  //   return super.subscribe(callback);
+  //   // TODO: Return the unsubscribe function from parent
+  // }
 }
 
 /**
@@ -251,72 +247,72 @@ export function effect(fn: () => void | (() => void)): () => void {
  * Demo function to test effect system
  * This will help you verify your implementation works correctly
  */
-export function demonstrateEffects(): void {
-  console.log("=== Phase 2: Effects Demo ===");
+// export function demonstrateEffects(): void {
+//   console.log("=== Phase 2: Effects Demo ===");
 
-  // Test cases to verify:
-  // 1. Effects run immediately when created
-  const count = reactiveSignal(0);
-  console.log("Creating effect...");
+//   // Test cases to verify:
+//   // 1. Effects run immediately when created
+//   const count = reactiveSignal(0);
+//   console.log("Creating effect...");
 
-  effect(() => {
-    console.log("Effect running, count is:", count.value);
-  }); // Should print: "Effect running, count is: 0"
+//   effect(() => {
+//     console.log("Effect running, count is:", count.value);
+//   }); // Should print: "Effect running, count is: 0"
 
-  // 2. Effects automatically track signal dependencies and re-run when they change
-  console.log("Changing count to 1...");
-  count.value = 1; // Should print: "Effect running, count is: 1"
+//   // 2. Effects automatically track signal dependencies and re-run when they change
+//   console.log("Changing count to 1...");
+//   count.value = 1; // Should print: "Effect running, count is: 1"
 
-  // 3. Effects can depend on multiple signals
-  const name = reactiveSignal("Alice");
-  effect(() => {
-    console.log(`Hello ${name.value}, count is ${count.value}`);
-  }); // Should print: "Hello Alice, count is 1"
+//   // 3. Effects can depend on multiple signals
+//   const name = reactiveSignal("Alice");
+//   effect(() => {
+//     console.log(`Hello ${name.value}, count is ${count.value}`);
+//   }); // Should print: "Hello Alice, count is 1"
 
-  console.log("Changing name to Bob...");
-  name.value = "Bob"; // Should print: "Hello Bob, count is 1"
+//   console.log("Changing name to Bob...");
+//   name.value = "Bob"; // Should print: "Hello Bob, count is 1"
 
-  console.log("Changing count to 2...");
-  count.value = 2; // Should print both effects
+//   console.log("Changing count to 2...");
+//   count.value = 2; // Should print both effects
 
-  // 4. Multiple effects can depend on the same signal
-  effect(() => {
-    console.log("Second effect sees count:", count.value);
-  }); // Should print: "Second effect sees count: 2"
+//   // 4. Multiple effects can depend on the same signal
+//   effect(() => {
+//     console.log("Second effect sees count:", count.value);
+//   }); // Should print: "Second effect sees count: 2"
 
-  console.log("Changing count to 3...");
-  count.value = 3; // Should trigger all effects that depend on count
+//   console.log("Changing count to 3...");
+//   count.value = 3; // Should trigger all effects that depend on count
 
-  // 5. Effects can return cleanup functions
-  let cleanupCalled = false;
-  const dispose = effect(() => {
-    console.log("Effect with cleanup, count:", count.value);
-    return () => {
-      cleanupCalled = true;
-      console.log("Cleanup called!");
-    };
-  });
+//   // 5. Effects can return cleanup functions
+//   let cleanupCalled = false;
+//   const dispose = effect(() => {
+//     console.log("Effect with cleanup, count:", count.value);
+//     return () => {
+//       cleanupCalled = true;
+//       console.log("Cleanup called!");
+//     };
+//   });
 
-  console.log("Changing count to 4 (should call cleanup then re-run)...");
-  count.value = 4; // Should call cleanup, then run effect
+//   console.log("Changing count to 4 (should call cleanup then re-run)...");
+//   count.value = 4; // Should call cleanup, then run effect
 
-  // 6. Disposed effects don't run anymore
-  console.log("Disposing effect...");
-  dispose();
-  console.log("Cleanup called?", cleanupCalled);
+//   // 6. Disposed effects don't run anymore
+//   console.log("Disposing effect...");
+//   dispose();
+//   console.log("Cleanup called?", cleanupCalled);
 
-  console.log("Changing count to 5 (disposed effect should not run)...");
-  count.value = 5; // Disposed effect should not run
+//   console.log("Changing count to 5 (disposed effect should not run)...");
+//   count.value = 5; // Disposed effect should not run
 
-  console.log("Phase 2 Complete!\n");
+//   console.log("Phase 2 Complete!\n");
 
-  console.log("🔍 Key Discoveries:");
-  console.log("• Effects automatically track dependencies via global context");
-  console.log("• Signals register with the current running effect");
-  console.log("• Effects re-run when ANY dependency changes");
-  console.log("• Cleanup functions handle resource management");
-  console.log("• Disposed effects stop reacting to changes\n");
-}
+//   console.log("🔍 Key Discoveries:");
+//   console.log("• Effects automatically track dependencies via global context");
+//   console.log("• Signals register with the current running effect");
+//   console.log("• Effects re-run when ANY dependency changes");
+//   console.log("• Cleanup functions handle resource management");
+//   console.log("• Disposed effects stop reacting to changes\n");
+// }
 
 // TODO: Export the global evalContext for debugging/testing (optional)
 export { evalContext };
