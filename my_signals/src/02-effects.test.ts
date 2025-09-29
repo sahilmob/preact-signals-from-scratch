@@ -388,11 +388,13 @@ describe("Phase 2: Effects System", () => {
 
   describe("ReactiveSignal Factory Function", () => {
     it("should create ReactiveSignal with value", () => {
-      // TODO: Test reactiveSignal(value) factory
+      const signal = reactiveSignal(42);
+      expect(signal.value).toEqual(42);
     });
 
     it("should create ReactiveSignal with undefined when no value", () => {
-      // TODO: Test reactiveSignal() factory without arguments
+      const signal = reactiveSignal();
+      expect(signal.value).toEqual(undefined);
     });
 
     it("should maintain type safety", () => {
