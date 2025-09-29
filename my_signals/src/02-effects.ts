@@ -37,7 +37,7 @@ export class Effect {
   // TODO: Add private _isDisposed property to track if effect is disposed
   private _isDisposed: boolean;
   private _unsubscribeFunctions: Set<() => void>;
-  private _isPending: boolean;
+  // private _isPending: boolean;
 
   constructor(fn: () => void | (() => void)) {
     // TODO: Store fn in _fn property
@@ -49,7 +49,7 @@ export class Effect {
     // TODO: Initialize _isDisposed as false
     this._isDisposed = false;
     this._unsubscribeFunctions = new Set();
-    this._isPending = false;
+    // this._isPending = false;
     // TODO: Call _run() to execute the effect immediately and establish initial dependencies
     this._run();
   }
@@ -109,12 +109,17 @@ export class Effect {
     // TODO: This is called when one of our dependency signals changes
     // TODO: Use setTimeout to defer execution and avoid infinite loops during signal updates
     // this._isPending = true;
-    setTimeout(() => {
-      if (!this._isDisposed) {
-        // this._isPending = false;
-        this._run();
-      }
-    }, 0);
+    if (!this._isDisposed) {
+      // this._isPending = false;
+      this._run();
+      queueMicrotask(() => {});
+    }
+    // setTimeout(() => {
+    //   if (!this._isDisposed) {
+    //     // this._isPending = false;
+    //     this._run();
+    //   }
+    // }, 0);
     // TODO: Later in Phase 5 (batching), this will be more sophisticated
   }
 
@@ -129,7 +134,7 @@ export class Effect {
   dispose(): void {
     // TODO: Set _isDisposed to true
     this._isDisposed = true;
-    this._isPending = false;
+    // this._isPending = false;
     // TODO: Call _cleanup function if it exists
     this._cleanup?.();
     // TODO: Unsubscribe from all dependencies
@@ -198,7 +203,7 @@ export class ReactiveSignal<T = any> extends Signal<T> {
       this._dependentEffects.size,
       "dependent effects"
     );
-    this._dependentEffects.forEach((effect) => effect.onDependencyChange());
+    // this._dependentEffects.forEach((effect) => effect.onDependencyChange());
   }
 
   // TODO: Add method to subscribe an effect to this signal
@@ -317,4 +322,4 @@ export function demonstrateEffects(): void {
 export { evalContext };
 
 // Run the demonstration when this file is executed directly
-demonstrateEffects();
+// demonstrateEffects();
