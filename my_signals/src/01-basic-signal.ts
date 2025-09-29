@@ -15,7 +15,7 @@
 // TODO: Define Signal class with generic type parameter T
 export class Signal<T = any> {
   // TODO: Add private _value property to store the actual value
-  public _value: T;
+  protected _value: T;
   // TODO: Add private _subscribers array to store callback functions
   protected _subscribers: Set<(v: T) => void>;
 
