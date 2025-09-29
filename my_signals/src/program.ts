@@ -1,9 +1,10 @@
+import { signal } from "./01-basic-signal.ts";
 import { effect, reactiveSignal } from "./02-effects.ts";
 
-const signal = reactiveSignal(42);
+const s = reactiveSignal(42);
 effect(() => {
-  signal.value;
+  s.value;
 });
 
-signal.value = 43;
-signal.value = 44;
+s.value = 43;
+s.value = 43;

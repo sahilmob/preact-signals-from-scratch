@@ -182,7 +182,14 @@ describe("Phase 1: Basic Signal Implementation", () => {
     });
 
     it("should maintain type safety", () => {
-      // TODO: Test TypeScript type inference works correctly
+      const numSignal = signal(42);
+      const strSignal = signal("hello");
+      const boolSignal = signal(true);
+
+      // TypeScript should infer correct types
+      expect(typeof numSignal.value).toBe('number');
+      expect(typeof strSignal.value).toBe('string');
+      expect(typeof boolSignal.value).toBe('boolean');
     });
 
     it("should create independent signal instances", () => {
@@ -200,21 +207,61 @@ describe("Phase 1: Basic Signal Implementation", () => {
     });
   });
 
-  describe.skip("Edge Cases and Error Handling", () => {
+  describe("Edge Cases and Error Handling", () => {
     it("should handle circular references in objects", () => {
-      // TODO: Test with objects that have circular references
+      const obj: any = { name: "test" };
+      obj.self = obj; // Create circular reference
+
+      const s = signal(obj);
+      expect(s.value.name).toBe("test");
+      expect(s.value.self).toBe(obj);
+
+      // Should work fine - signals just store references
+      obj.name = "updated";
+      expect(s.value.name).toBe("updated");
     });
 
     it("should handle very large numbers", () => {
-      // TODO: Test with Number.MAX_VALUE, Number.MIN_VALUE, Infinity
+      const maxSignal = signal(Number.MAX_VALUE);
+      const minSignal = signal(Number.MIN_VALUE);
+      const infSignal = signal(Infinity);
+      const negInfSignal = signal(-Infinity);
+
+      expect(maxSignal.value).toBe(Number.MAX_VALUE);
+      expect(minSignal.value).toBe(Number.MIN_VALUE);
+      expect(infSignal.value).toBe(Infinity);
+      expect(negInfSignal.value).toBe(-Infinity);
     });
 
     it("should handle special string values", () => {
-      // TODO: Test with empty string, whitespace, unicode characters
+      const emptySignal = signal("");
+      const spaceSignal = signal("   ");
+      const unicodeSignal = signal("🚀 Hello 世界 👋");
+      const newlineSignal = signal("line1\nline2\ttab");
+
+      expect(emptySignal.value).toBe("");
+      expect(spaceSignal.value).toBe("   ");
+      expect(unicodeSignal.value).toBe("🚀 Hello 世界 👋");
+      expect(newlineSignal.value).toBe("line1\nline2\ttab");
     });
 
     it("should work with complex nested objects", () => {
-      // TODO: Test with deeply nested objects and arrays
+      const complex = {
+        users: [
+          { id: 1, profile: { name: "Alice", settings: { theme: "dark" } } },
+          { id: 2, profile: { name: "Bob", settings: { theme: "light" } } }
+        ],
+        metadata: {
+          version: "1.0",
+          features: new Set(["auth", "sync"]),
+          config: new Map<string, any>([["env", "prod"], ["debug", false]])
+        }
+      };
+
+      const s = signal(complex);
+      expect(s.value.users[0].profile.name).toBe("Alice");
+      expect(s.value.metadata.features.has("auth")).toBe(true);
+      expect(s.value.metadata.config.get("env")).toBe("prod");
     });
   });
 

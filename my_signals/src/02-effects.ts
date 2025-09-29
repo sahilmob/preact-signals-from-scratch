@@ -63,8 +63,12 @@ export class Effect {
     }
     // TODO: Clean up previous run:
     // - Call _cleanup function if it exists, then set to undefined
-    this._cleanup?.();
-    this._cleanup = undefined;
+    try {
+      this._cleanup?.();
+      this._cleanup = undefined;
+    } catch (error) {
+      console.log(error);
+    }
     // - Unsubscribe from all current dependencies
     console.log(
       "📤 Unsubscribing from",
@@ -129,7 +133,11 @@ export class Effect {
     this._isDisposed = true;
     // this._isPending = false;
     // TODO: Call _cleanup function if it exists
-    this._cleanup?.();
+    try {
+      this._cleanup?.();
+    } catch (error) {
+      console.log(error);
+    }
     // TODO: Unsubscribe from all dependencies
     this._unsubscribeFunctions.forEach((unsub) => unsub());
     this._unsubscribeFunctions.clear();

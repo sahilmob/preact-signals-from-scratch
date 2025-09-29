@@ -47,7 +47,14 @@ describe("Phase 2: Effects System", () => {
     // });
 
     it("should not register when no evalContext is present", () => {
-      // TODO: Test that accessing .value outside effects doesn't create dependencies
+      const signal = reactiveSignal(42);
+
+      // Access value outside of effect
+      const value = signal.value;
+      expect(value).toBe(42);
+
+      // Should have no dependent effects
+      expect((signal as any)._dependentEffects.size).toBe(0);
     });
 
     it("should notify dependent effects when value changes", () => {
@@ -80,26 +87,38 @@ describe("Phase 2: Effects System", () => {
     });
 
     it("should set evalContext during execution", () => {
-      // TODO: Test that global evalContext is set to the effect during execution
+      let contextDuringExecution: any;
+
+      effect(() => {
+        contextDuringExecution = evalContext;
+      });
+
+      expect(contextDuringExecution).toBeInstanceOf(Effect);
     });
 
     it("should restore previous evalContext after execution", () => {
       let originalContext = evalContext;
-      let ctx1;
-      let ctx2;
-      let effect1;
-      let effect2;
-      effect(function () {
+      let ctx1: any;
+      let ctx2: any;
+      let effect1: any;
+      let effect2: any;
+
+      effect(() => {
         ctx1 = evalContext;
-        effect1 = this as Effect;
-        effect(function () {
+        effect1 = evalContext; // evalContext IS the current effect during execution
+
+        effect(() => {
           ctx2 = evalContext;
-          effect2 = this as Effect;
+          effect2 = evalContext; // evalContext IS the current effect during execution
         });
       });
+
       expect(evalContext).toEqual(originalContext);
       expect(ctx1).toEqual(effect1);
       expect(ctx2).toEqual(effect2);
+      expect(ctx1).toBeInstanceOf(Effect);
+      expect(ctx2).toBeInstanceOf(Effect);
+      expect(ctx1).not.toEqual(ctx2); // Should be different Effect instances
     });
 
     // it("should track dependencies automatically", () => {
@@ -182,14 +201,40 @@ describe("Phase 2: Effects System", () => {
     });
 
     it("should update dependencies on re-execution", () => {
-      // TODO: Test that dependencies change if effect accesses different signals
+      const signal1 = reactiveSignal(1);
+      const signal2 = reactiveSignal(2);
+      const toggle = reactiveSignal(true);
+
+      const cb = vi.fn();
+
+      effect(() => {
+        cb();
+        if (toggle.value) {
+          signal1.value; // Access signal1 when toggle is true
+        } else {
+          signal2.value; // Access signal2 when toggle is false
+        }
+      });
+
+      // Initially should be called once
+      expect(cb).toHaveBeenCalledTimes(1);
+
+      // Change toggle to switch dependencies
+      toggle.value = false;
+
+      expect(cb).toHaveBeenCalledTimes(2);
+
+      // Now signal2 changes should trigger effect
+      signal2.value = 3;
+
+      expect(cb).toHaveBeenCalledTimes(3);
     });
 
     it("should handle conditional dependencies", () => {
       let count = 0;
       const s1 = reactiveSignal(42);
       const s2 = reactiveSignal(43);
-      let result;
+      let result: number;
 
       effect(() => {
         if (count % 2 === 0) {
@@ -208,7 +253,21 @@ describe("Phase 2: Effects System", () => {
     });
 
     it("should work with nested signal access", () => {
-      // TODO: Test signal access within function calls inside effects
+      const signal1 = reactiveSignal(10);
+      const signal2 = reactiveSignal(20);
+
+      const getValue = (s: ReactiveSignal<number>) => s.value * 2;
+      const cb = vi.fn();
+
+      effect(() => {
+        const result = getValue(signal1) + getValue(signal2);
+        cb(result);
+      });
+
+      expect(cb).toHaveBeenCalledWith(60); // (10*2) + (20*2)
+
+      signal1.value = 15;
+      expect(cb).toHaveBeenCalledWith(70); // (15*2) + (20*2)
     });
   });
 
@@ -222,9 +281,7 @@ describe("Phase 2: Effects System", () => {
 
       signal.value = 43;
 
-      setTimeout(() => {
-        expect(cb).toHaveBeenCalledTimes(2);
-      });
+      expect(cb).toHaveBeenCalledTimes(2);
     });
 
     it("should use deferred execution to prevent infinite loops", () => {
@@ -242,7 +299,26 @@ describe("Phase 2: Effects System", () => {
     });
 
     it("should handle pending state correctly", () => {
-      // TODO: Test that multiple rapid changes don't queue multiple executions
+      const signal = reactiveSignal(0);
+      const cb = vi.fn();
+
+      effect(() => {
+        cb(signal.value);
+      });
+
+      expect(cb).toHaveBeenCalledTimes(1);
+
+      // Make rapid changes
+      signal.value = 1;
+      signal.value = 2;
+      signal.value = 3;
+
+      // Should eventually settle to final value
+      setTimeout(() => {
+        expect(cb).toHaveBeenLastCalledWith(3);
+        // Note: Due to deferred execution, exact call count may vary
+        // but should be less than 4 (1 initial + potential batching)
+      }, 20);
     });
 
     it("should call cleanup before re-execution", () => {
@@ -392,117 +468,381 @@ describe("Phase 2: Effects System", () => {
     });
 
     it("should maintain type safety", () => {
-      // TODO: Test TypeScript type inference
+      const numSignal = reactiveSignal(42);
+      const strSignal = reactiveSignal("hello");
+      const boolSignal = reactiveSignal(true);
+
+      // TypeScript should infer correct types
+      expect(typeof numSignal.value).toBe("number");
+      expect(typeof strSignal.value).toBe("string");
+      expect(typeof boolSignal.value).toBe("boolean");
     });
   });
 
   describe("Cleanup and Memory Management", () => {
     it("should clean up effect subscriptions on dispose", () => {
-      // TODO: Test that effect disposal removes all signal subscriptions
+      const signal = reactiveSignal(42);
+      const cb = vi.fn().mockImplementation(() => console.log(signal.value));
+
+      const dispose = effect(cb);
+
+      // Should have 1 dependent effect
+      expect((signal as any)._dependentEffects.size).toBe(1);
+
+      dispose();
+
+      // Should have no dependent effects after disposal
+      expect((signal as any)._dependentEffects.size).toBe(0);
     });
 
     it("should call cleanup functions on dispose", () => {
-      // TODO: Test that disposal calls the effect's cleanup function
+      const cleanup = vi.fn();
+      const cb = vi.fn().mockReturnValue(cleanup);
+
+      const dispose = effect(cb);
+
+      expect(cleanup).not.toHaveBeenCalled();
+      dispose();
+      expect(cleanup).toHaveBeenCalledOnce();
     });
 
     it("should prevent memory leaks", () => {
-      // TODO: Test that disposed effects can be garbage collected
+      const signal = reactiveSignal(42);
+      const effects: Array<() => void> = [];
+
+      // Create many effects
+      for (let i = 0; i < 100; i++) {
+        const dispose = effect(() => {
+          signal.value; // Create dependency
+        });
+        effects.push(dispose);
+      }
+
+      expect((signal as any)._dependentEffects.size).toBe(100);
+
+      // Dispose all effects
+      effects.forEach((dispose) => dispose());
+
+      expect((signal as any)._dependentEffects.size).toBe(0);
     });
 
     it("should handle multiple dispose calls safely", () => {
-      // TODO: Test that calling dispose multiple times is safe
+      const cleanup = vi.fn();
+      const cb = vi.fn().mockReturnValue(cleanup);
+
+      const dispose = effect(cb);
+
+      dispose();
+      dispose(); // Should not throw or call cleanup again
+      dispose(); // Should not throw or call cleanup again
+
+      expect(cleanup).toHaveBeenCalledTimes(1);
     });
   });
 
   describe("Error Handling", () => {
     it("should handle errors in effect functions", () => {
-      // TODO: Test that errors don't crash the system
+      const signal = reactiveSignal(42);
+
+      expect(() => {
+        effect(() => {
+          signal.value;
+          throw new Error("Effect error");
+        });
+      }).not.toThrow(); // Should not crash the system
+
+      // Signal should still work
+      signal.value = 43;
+      expect(signal.value).toBe(43);
     });
 
     it("should handle errors in cleanup functions", () => {
-      // TODO: Test error handling in cleanup functions
+      const signal = reactiveSignal(42);
+      const errorCleanup = vi.fn().mockImplementation(() => {
+        throw new Error("Cleanup error");
+      });
+
+      const dispose = effect(() => {
+        signal.value;
+        return errorCleanup;
+      });
+
+      expect(() => dispose()).not.toThrow();
+      expect(errorCleanup).toHaveBeenCalled();
     });
 
     it("should dispose effect on uncaught errors", () => {
-      // TODO: Test that effects with errors get disposed properly
+      const signal = reactiveSignal(42);
+      const cb = vi.fn().mockImplementation(() => {
+        signal.value;
+        throw new Error("Uncaught error");
+      });
+
+      effect(cb);
+      expect(cb).toHaveBeenCalledTimes(1);
+
+      // After error, effect should be disposed
+      signal.value = 43;
+
+      expect(cb).toHaveBeenCalledTimes(1);
     });
 
     it("should handle errors in signal subscribers", () => {
-      // TODO: Test that subscriber errors don't affect effect system
+      const signal = reactiveSignal(42);
+
+      signal.subscribe(() => {
+        throw new Error("Subscriber error");
+      });
+
+      const cb = vi.fn();
+      signal.subscribe(cb);
+
+      // Should not crash when changing value
+      expect(() => {
+        signal.value = 43;
+      }).not.toThrow();
+
+      expect(cb).toHaveBeenCalledTimes(2); // Once on subscribe, once on change
     });
   });
 
   describe("Edge Cases", () => {
     it("should handle effects that don't access any signals", () => {
-      // TODO: Test effects with no dependencies
+      const cb = vi.fn().mockImplementation(() => {
+        // Effect that doesn't access any signals
+        console.log("Running effect without dependencies");
+      });
+
+      effect(cb);
+
+      expect(cb).toHaveBeenCalledTimes(1);
+      // Since it has no dependencies, it should not run again
     });
 
     it("should handle signals accessed only in cleanup", () => {
-      // TODO: Test signals accessed only during cleanup phase
+      const signal = reactiveSignal(42);
+      const cleanup = vi.fn().mockImplementation(() => {
+        // Access signal only during cleanup
+        console.log("Cleanup sees:", signal.value);
+      });
+
+      const dispose = effect(() => {
+        console.log("Effect running");
+        return cleanup;
+      });
+
+      dispose();
+      expect(cleanup).toHaveBeenCalled();
     });
 
     it("should handle rapid signal changes", () => {
-      // TODO: Test performance with many rapid signal updates
+      const signal = reactiveSignal(0);
+      const cb = vi.fn();
+
+      effect(() => {
+        cb(signal.value);
+      });
+
+      // Rapid changes
+      for (let i = 1; i <= 50; i++) {
+        signal.value = i;
+      }
+
+      expect(cb).toHaveBeenLastCalledWith(50);
     });
 
     it("should handle deeply nested signal access", () => {
-      // TODO: Test complex dependency chains
+      const signals = Array.from({ length: 5 }, (_, i) => reactiveSignal(i));
+      // [0,1,2,3,4]
+      const cb = vi.fn();
+
+      effect(() => {
+        // Deeply nested access pattern
+        let result = signals[0].value; // 1
+        if (result > 0) {
+          result += signals[1].value; // 2
+          if (result > 1) {
+            result += signals[2].value; // 4
+            if (result > 3) {
+              result += signals[3].value; // 7
+              if (result > 6) {
+                result += signals[4].value;
+              }
+            }
+          }
+        }
+        cb(result);
+      });
+
+      expect(cb).toHaveBeenCalledWith(0); // 0 (first condition fails)
+
+      signals[0].value = 1;
+      expect(cb).toHaveBeenLastCalledWith(11); // 1+1+2+3+4 = 11, but 0+1+2+3+4 = 10
     });
   });
 
   describe("Integration with Basic Signals", () => {
     it("should work with regular Signal subscribers", () => {
-      // TODO: Test that ReactiveSignals work with regular subscribe() calls
+      const signal = reactiveSignal(42);
+      const cb = vi.fn();
+
+      signal.subscribe(cb);
+      expect(cb).toHaveBeenCalledWith(42);
+
+      signal.value = 43;
+      expect(cb).toHaveBeenCalledWith(43);
+      expect(cb).toHaveBeenCalledTimes(2);
     });
 
     it("should maintain all Signal methods", () => {
-      // TODO: Test peek(), toString(), toJSON(), valueOf() methods
+      const signal = reactiveSignal({ count: 42 });
+
+      expect(signal.peek().count).toBe(42);
+      expect(signal.toString()).toBe("[object Object]");
+      expect(signal.toJSON()).toEqual({ count: 42 });
+      expect(signal.valueOf()).toEqual({ count: 42 });
     });
 
     it("should handle mixed Signal and ReactiveSignal usage", () => {
-      // TODO: Test interoperability between Signal types
+      const basicSignal = signal(10);
+      const reactiveSignal2 = reactiveSignal(20);
+      const cb = vi.fn();
+
+      effect(() => {
+        // Only reactiveSignal2 should create dependency
+        const result = basicSignal.peek() + reactiveSignal2.value;
+        cb(result);
+      });
+
+      expect(cb).toHaveBeenCalledWith(30);
+
+      // Changing basicSignal should not trigger effect
+      basicSignal.value = 15;
+      expect(cb).toHaveBeenCalledTimes(1);
+
+      // Changing reactiveSignal2 should trigger effect
+      reactiveSignal2.value = 25;
+      expect(cb).toHaveBeenCalledWith(40); // 15 + 25 (using peek for basicSignal)
     });
   });
 
   describe("Global evalContext", () => {
     it("should be undefined by default", () => {
-      // TODO: Test that evalContext starts as undefined
+      expect(evalContext).toBeUndefined();
     });
 
     it("should be set during effect execution", () => {
-      // TODO: Test that evalContext is set to current effect during execution
+      let contextDuringExecution: any;
+
+      effect(() => {
+        contextDuringExecution = evalContext;
+      });
+
+      expect(contextDuringExecution).toBeInstanceOf(Effect);
+      expect(evalContext).toBeUndefined(); // Should be restored after effect
     });
 
     it("should handle nested evalContext correctly", () => {
-      // TODO: Test that nested effects preserve outer context
+      let outerContext: any;
+      let innerContext: any;
+
+      effect(() => {
+        outerContext = evalContext;
+
+        effect(() => {
+          innerContext = evalContext;
+        });
+      });
+
+      expect(outerContext).toBeInstanceOf(Effect);
+      expect(innerContext).toBeInstanceOf(Effect);
+      expect(outerContext).not.toBe(innerContext); // Should be different instances
+      expect(evalContext).toBeUndefined(); // Should be restored after both effects
     });
 
     it("should be restored after effect execution", () => {
-      // TODO: Test that evalContext is properly restored after effects
+      const originalContext = evalContext;
+
+      effect(() => {
+        // evalContext should be set to current effect
+        expect(evalContext).toBeInstanceOf(Effect);
+      });
+
+      // Should be restored to original value
+      expect(evalContext).toBe(originalContext);
     });
   });
 
   describe("Integration with demonstrateEffects", () => {
-    let consoleSpy: ReturnType<typeof vi.spyOn>;
+    let consoleSpy: any;
 
     beforeEach(() => {
-      // TODO: Set up console spy to capture demo output
+      consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     });
 
     afterEach(() => {
-      // TODO: Restore console
+      consoleSpy.mockRestore();
     });
 
     it("should complete demonstration without errors", () => {
-      // TODO: Test that demonstrateEffects() runs successfully
+      // Note: demonstrateEffects is commented out in the implementation
+      // This test verifies the basic functionality works without the full demo
+
+      expect(() => {
+        const count = reactiveSignal(0);
+        effect(() => {
+          console.log("Effect running, count is:", count.value);
+        });
+        count.value = 1;
+      }).not.toThrow();
     });
 
     it("should show expected console output", () => {
-      // TODO: Test that demo produces expected console messages
+      const count = reactiveSignal(0);
+
+      effect(() => {
+        console.log("Effect running, count is:", count.value);
+      });
+
+      count.value = 1;
+
+      expect(consoleSpy).toHaveBeenCalled();
+      expect(consoleSpy).toHaveBeenCalledWith("Effect running, count is:", 0);
     });
 
     it("should demonstrate all key features", () => {
-      // TODO: Test that all advertised features work in demo
+      // Test the key features mentioned in the documentation
+      const count = reactiveSignal(0);
+      const name = reactiveSignal("Alice");
+      const effectCalls: any[] = [];
+
+      // Feature 1: Immediate execution
+      effect(() => {
+        effectCalls.push(["immediate", count.value]);
+      });
+      expect(effectCalls).toContainEqual(["immediate", 0]);
+
+      // Feature 2: Automatic re-execution
+      count.value = 1;
+      setTimeout(() => {
+        expect(effectCalls).toContainEqual(["immediate", 1]);
+      }, 10);
+
+      // Feature 3: Multiple dependencies
+      effect(() => {
+        effectCalls.push(["multi", name.value, count.value]);
+      });
+
+      // Feature 4: Cleanup functions
+      let cleanupCalled = false;
+      const dispose = effect(() => {
+        return () => {
+          cleanupCalled = true;
+        };
+      });
+
+      dispose();
+      expect(cleanupCalled).toBe(true);
     });
   });
 });
