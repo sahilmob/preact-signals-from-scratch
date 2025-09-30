@@ -80,12 +80,7 @@ export class Effect implements IEffect {
     } catch (error) {
       console.log(error);
     }
-    // - Unsubscribe from all current dependencies
-    console.log(
-      "📤 Unsubscribing from",
-      this._unsubscribeFunctions.size,
-      "dependencies"
-    );
+
     this._unsubscribeFunctions.forEach((unsub) => unsub());
     this._unsubscribeFunctions.clear();
     // - Clear the _dependencies Set
@@ -112,9 +107,7 @@ export class Effect implements IEffect {
   }
 
   onDependencyChange(): void {
-    console.log("🔔 Effect.onDependencyChange() called");
     if (this._isDisposed) {
-      console.log("❌ Effect is disposed, ignoring dependency change");
       return;
     }
     // if (this._isPending) {
@@ -132,7 +125,6 @@ export class Effect implements IEffect {
   }
 
   addDependency(signal: ReactiveSignal<any>): void {
-    console.log("➕ Adding dependency", signal);
     // this._dependencies.add(signal);
     // Subscribe to the signal and store the unsubscribe function
     const unsubscribe = signal.subscribeEffect(this);
@@ -174,10 +166,8 @@ export class ReactiveSignal<T = any> extends Signal<T> {
   }
 
   get value(): T {
-    console.log("👀 Signal getter called");
     // TODO: Check if there's a current evalContext (an effect is running)
     if (evalContext) {
-      console.log("🎯 EvalContext exists, adding dependency");
       // TODO: If yes, register this signal as a dependency:
       //   - Add this signal to the effect's _dependencies
       const ctx = evalContext;
@@ -196,7 +186,6 @@ export class ReactiveSignal<T = any> extends Signal<T> {
     const oldValue = this._value;
     // TODO: If the value actually changed, notify all dependent effects:
     if (Object.is(newValue, oldValue)) return;
-    console.log("🔄 Signal value changed from", oldValue, "to", newValue);
 
     // Set the value directly
     this._value = newValue;
@@ -210,12 +199,6 @@ export class ReactiveSignal<T = any> extends Signal<T> {
       }
     });
 
-    // Notify dependent effects
-    console.log(
-      "📢 Notifying",
-      this._dependentEffects.size,
-      "dependent effects"
-    );
     [...this._dependentEffects].forEach((effect) =>
       effect.onDependencyChange()
     );
@@ -224,11 +207,9 @@ export class ReactiveSignal<T = any> extends Signal<T> {
   // TODO: Add method to subscribe an effect to this signal
   subscribeEffect(effect: IEffect): () => void {
     // TODO: Add effect to _dependentEffects Set
-    console.log("✅ New effect subscription");
     this._dependentEffects.add(effect);
     // TODO: Return unsubscribe function that removes effect from _dependentEffects
     return () => {
-      console.log("🗑️ Unsubscribing effect");
       this._dependentEffects.delete(effect);
     };
   }
