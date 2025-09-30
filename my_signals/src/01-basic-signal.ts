@@ -26,7 +26,7 @@ export class Signal<T = any> {
     // TODO: Initialize _subscribers as empty array
   }
 
-  get value(): T {
+  get value(): T | undefined {
     // TODO: Return the current _value
     return this._value;
     // Note: Later phases will add dependency tracking here
@@ -52,7 +52,7 @@ export class Signal<T = any> {
    * Subscribe to changes in this signal
    * Returns an unsubscribe function
    */
-  subscribe(callback: (value: T) => void): () => void {
+  subscribe(callback: (value: T | undefined) => void): () => void {
     // TODO: Add callback to _subscribers array
     this._subscribers.add(callback);
     // TODO: Immediately call callback with current value (matches Preact behavior)
@@ -70,9 +70,9 @@ export class Signal<T = any> {
    * Get current value without subscribing (peek)
    * This will be important later for avoiding unwanted dependencies
    */
-  peek(): T {
+  peek(): T | undefined {
     // TODO: Return _value directly without any side effects
-    return this.value;
+    return this._value;
   }
 
   /**
@@ -80,13 +80,13 @@ export class Signal<T = any> {
    */
   toString(): string {
     // TODO: Convert _value to string
-    return String(this.value);
+    return String(this._value);
   }
 
   /**
    * JSON serialization
    */
-  toJSON(): T {
+  toJSON(): T | undefined {
     // TODO: Return _value for JSON.stringify
     return this._value;
   }
@@ -94,7 +94,7 @@ export class Signal<T = any> {
   /**
    * Value coercion for arithmetic operations
    */
-  valueOf(): T {
+  valueOf(): T | undefined {
     // TODO: Return _value for primitive coercion
     return this._value;
   }

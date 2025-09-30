@@ -24,10 +24,21 @@ import { Signal } from "./01-basic-signal.ts";
 // This is the "magic" that makes automatic dependency tracking work!
 // When an effect runs, this gets set to that effect
 // When a signal's .value is read, it checks this variable
-let evalContext: Effect | undefined = undefined;
+
+export interface IEffect {
+  _unsubscribeFunctions: Set<() => void>;
+  addDependency(signal: ReactiveSignal<any>): void;
+  onDependencyChange(): void;
+}
+
+type CTX = IEffect | undefined;
+let evalContext: CTX = undefined;
+
+export const getContext = () => evalContext;
+export const setContext = (ctx: CTX) => (evalContext = ctx);
 
 // TODO: Define Effect class
-export class Effect {
+export class Effect implements IEffect {
   // TODO: Add private _fn property to store the effect callback function
   private _fn?: Function;
   // TODO: Add private _cleanup property to store optional cleanup function returned by _fn
@@ -36,7 +47,7 @@ export class Effect {
   // private _dependencies: Set<Signal<any>>;
   // TODO: Add private _isDisposed property to track if effect is disposed
   private _isDisposed: boolean;
-  private _unsubscribeFunctions: Set<() => void>;
+  _unsubscribeFunctions: Set<() => void>;
   // private _isPending: boolean;
 
   constructor(fn: () => void | (() => void)) {
@@ -153,7 +164,7 @@ export class Effect {
 // This is where the magic happens - signals register themselves with the current effect
 export class ReactiveSignal<T = any> extends Signal<T> {
   // TODO: Add private _dependentEffects property to store Set of effects that depend on this signal
-  private _dependentEffects: Set<Effect>;
+  protected _dependentEffects: Set<IEffect>;
 
   constructor(initialValue: T) {
     // TODO: Call parent constructor
@@ -162,7 +173,7 @@ export class ReactiveSignal<T = any> extends Signal<T> {
     this._dependentEffects = new Set();
   }
 
-  get value(): T {
+  get value(): T | undefined {
     console.log("👀 Signal getter called");
     // TODO: Check if there's a current evalContext (an effect is running)
     if (evalContext) {
@@ -211,7 +222,7 @@ export class ReactiveSignal<T = any> extends Signal<T> {
   }
 
   // TODO: Add method to subscribe an effect to this signal
-  subscribeEffect(effect: Effect): () => void {
+  subscribeEffect(effect: IEffect): () => void {
     // TODO: Add effect to _dependentEffects Set
     console.log("✅ New effect subscription");
     this._dependentEffects.add(effect);

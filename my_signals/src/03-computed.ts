@@ -21,18 +21,28 @@
  */
 
 // Import previous phase implementations
-import { ReactiveSignal, Effect, evalContext } from "./02-effects.ts";
 
-// TODO: Define the state of a computed signal
+import {
+  ReactiveSignal,
+  Effect,
+  evalContext,
+  effect,
+  reactiveSignal,
+  getContext,
+  setContext,
+  IEffect,
+} from "./02-effects.ts";
+
+// TODO: Define an enum called ComputedState with four states:
+// - FRESH: computed value is up to date
+// - STALE: one or more dependencies have changed, needs recomputation
+// - COMPUTING: currently being computed (prevents infinite recursion)
+// - ERROR: computation threw an error
 enum ComputedState {
-  // TODO: FRESH - computed value is up to date
-  FRESH = "fresh",
-  // TODO: STALE - one or more dependencies have changed, needs recomputation
-  STALE = "stale",
-  // TODO: COMPUTING - currently being computed (prevents infinite recursion)
-  COMPUTING = "computing",
-  // TODO: ERROR - computation threw an error
-  ERROR = "error"
+  FRESH,
+  STALE,
+  COMPUTING,
+  ERROR,
 }
 
 /**
@@ -44,169 +54,183 @@ enum ComputedState {
  * 3. Results are cached until dependencies change
  * 4. Cannot be written to (read-only)
  */
-export class ComputedSignal<T> extends ReactiveSignal<T> {
-  // TODO: Add private _computeFn property to store the computation function
+export class ComputedSignal<T> extends ReactiveSignal<T> implements IEffect {
+  // TODO: Add private _computeFn property to store the computation function (type: () => T)
+
   private _computeFn: () => T;
-  // TODO: Add private _state property to track computation state
+
+  // TODO: Add private _state property to track computation state (type: ComputedState)
   private _state: ComputedState;
-  // TODO: Add private _error property to store computation errors
-  private _error?: any;
-  // TODO: Add private _isComputed flag to distinguish from regular signals
-  private _isComputed: boolean = true;
+
+  // TODO: Add private _error property to store computation errors (type: any, optional)
+  private _error: any;
+
+  // TODO: Add private _isComputed flag set to true to distinguish from regular signals
+  private _isComputed = true;
+
+  _unsubscribeFunctions: Set<() => void>;
 
   constructor(computeFn: () => T) {
-    // TODO: Call parent constructor with undefined initial value
+    // TODO: Call parent constructor with undefined as any (since we don't have initial value yet)
     super(undefined as any);
-    // TODO: Store the compute function
+    // TODO: Store the compute function in _computeFn
     this._computeFn = computeFn;
-    // TODO: Initialize state as STALE (needs first computation)
+    // TODO: Initialize _state as STALE (needs first computation)
     this._state = ComputedState.STALE;
-    // TODO: Initialize error as undefined
+    // TODO: Initialize _error as undefined
     this._error = undefined;
+    this._unsubscribeFunctions = new Set();
+  }
+  addDependency(signal: ReactiveSignal<any>): void {
+    const unsub = signal.subscribeEffect(this);
+    this._unsubscribeFunctions.add(unsub);
   }
 
-  // TODO: Override the value getter to implement lazy evaluation
+  // TODO: Override the value getter to implement lazy evaluation:
   get value(): T {
-    console.log("🔍 ComputedSignal.value getter called, state:", this._state);
+    // 1. Add console.log to show state when getter is called
+    console.log("ComputedSignal getter called");
 
-    // TODO: Check if we're already computing (cycle detection)
     if (this._state === ComputedState.COMPUTING) {
-      // TODO: Throw error for circular dependency
-      throw new Error("Circular dependency detected in computed signal");
+      // 2. Check if state is COMPUTING - if so, throw error for circular dependency
+      throw Error("Circular dependency");
     }
 
-    // TODO: Check if we're in ERROR state
     if (this._state === ComputedState.ERROR) {
-      // TODO: Re-throw the stored error
+      // 3. Check if state is ERROR - if so, re-throw the stored error
       throw this._error;
     }
 
-    // TODO: Check if value is FRESH (no recomputation needed)
+    // 4. Check if state is FRESH:
     if (this._state === ComputedState.FRESH) {
-      // TODO: Register with current evalContext if it exists
+      //    - Register with current evalContext if it exists
       if (evalContext) {
         evalContext.addDependency(this);
       }
-      // TODO: Return cached value
+
+      //    - Return cached _value
       return this._value;
     }
 
-    // TODO: Value is STALE, needs recomputation
+    // 5. Otherwise, value is STALE - return result of _recompute()
     return this._recompute();
   }
 
-  // TODO: Override the value setter to prevent direct assignment
-  set value(_: T) {
-    // TODO: Throw error - computed signals are read-only
-    throw new Error("Cannot set value of computed signal directly. Computed signals are read-only.");
+  // TODO: Override the value setter to prevent direct assignment:
+  // - Throw error: "Cannot set value of computed signal directly. Computed signals are read-only."
+  set value(v: any) {
+    throw new Error(
+      "Cannot set value of computed signal directly. Computed signals are read-only."
+    );
   }
-
-  // TODO: Add private _recompute method for lazy evaluation
+  // TODO: Add private _recompute method that returns T:
   private _recompute(): T {
-    console.log("🔄 ComputedSignal._recompute() starting");
-
-    // TODO: Set state to COMPUTING to detect cycles
+    // 1. Add console.log to show recomputation starting
+    console.log("ComputedSignal recomputing");
+    // 2. Set state to COMPUTING to detect cycles
     this._state = ComputedState.COMPUTING;
-
-    // TODO: Clear any previous error
+    // 3. Clear any previous error (set _error to undefined)
     this._error = undefined;
-
-    // TODO: Set up evaluation context (similar to Effect._run)
-    const prevContext = evalContext;
-    evalContext = this as any; // ComputedSignals can also be evalContext
-
-    // TODO: Clear previous dependencies (unsubscribe from old signals)
+    // 4. Set up evaluation context:
+    //    - Save current evalContext to prevContext
+    const prevContext = getContext();
+    //    - Set evalContext to this (cast as any since ComputedSignals can be evalContext)
+    setContext(this as any);
+    // 5. Clear previous dependencies by calling _unsubscribeFromDependencies()
     this._unsubscribeFromDependencies();
-
+    // 6. Use try-catch-finally:
+    //    try:
     try {
-      // TODO: Execute the compute function
-      const newValue = this._computeFn();
-
-      // TODO: Check if value actually changed
-      if (!Object.is(this._value, newValue)) {
-        // TODO: Update the cached value
-        this._value = newValue;
-        // TODO: Notify any effects that depend on this computed signal
-        this._notifyDependentEffects();
-      }
-
-      // TODO: Mark state as FRESH
+      //      - Execute _computeFn() and store result in newValue
+      const newVal = this._computeFn();
+      if (Object.is(newVal, this._value)) return this._value;
+      //      - Check if value changed using Object.is(_value, newValue)
+      //      - If changed:
+      this._value = newVal;
+      this._notifyDependentEffects();
       this._state = ComputedState.FRESH;
-
-      // TODO: Return the computed value
-      return this._value;
-
+      return newVal;
+      //        * Update _value to newValue
+      //        * Call _notifyDependentEffects()
+      //      - Set _state to FRESH
+      //      - Return _value
     } catch (error) {
-      // TODO: Store error and mark state as ERROR
+      //    catch (error):
+      //      - Store error in _error
+      //      - Set _state to ERROR
+      //      - Re-throw error
       this._error = error;
       this._state = ComputedState.ERROR;
-      // TODO: Re-throw the error
       throw error;
-
     } finally {
-      // TODO: Restore previous evaluation context
-      evalContext = prevContext;
+      //    finally:
+      //      - Restore evalContext from prevContext
+      setContext(prevContext);
     }
   }
 
-  // TODO: Add method to handle dependency changes (when input signals change)
-  onDependencyChange(): void {
-    console.log("🔔 ComputedSignal.onDependencyChange() - marking as STALE");
-
-    // TODO: Only mark as stale if we're currently fresh
+  // TODO: Add onDependencyChange method (called when input signals change):
+  onDependencyChange() {
+    // 1. Add console.log to show dependency change
+    console.log("ComputedSignal dependency changed");
+    // 2. Check if _state is FRESH
     if (this._state === ComputedState.FRESH) {
-      // TODO: Mark as stale (needs recomputation)
+      // 3. If fresh:
+      //    - Mark as STALE
       this._state = ComputedState.STALE;
-
-      // TODO: Notify any effects that depend on this computed signal
-      // Note: We don't recompute immediately - that's the "lazy" part!
       this._notifyDependentEffects();
+      //    - Call _notifyDependentEffects() (but don't recompute - that's the lazy part!)
     }
   }
 
-  // TODO: Add private method to unsubscribe from previous dependencies
-  private _unsubscribeFromDependencies(): void {
-    // TODO: Unsubscribe from all current dependencies
-    this._unsubscribeFunctions.forEach(unsub => unsub());
+  // TODO: Add private _unsubscribeFromDependencies method:
+  private _unsubscribeFromDependencies() {
+    // - Loop through _unsubscribeFunctions and call each unsubscribe function
+    this._unsubscribeFunctions.forEach((unsub) => unsub());
+    // - Clear _unsubscribeFunctions set
     this._unsubscribeFunctions.clear();
   }
 
-  // TODO: Add private method to notify dependent effects
-  private _notifyDependentEffects(): void {
-    // TODO: Notify all effects that depend on this computed signal
-    [...this._dependentEffects].forEach(effect => effect.onDependencyChange());
+  private _notifyDependentEffects() {
+    // TODO: Add private _notifyDependentEffects method:
+    // - Convert _dependentEffects to array and forEach, calling effect.onDependencyChange()
+    [...this._dependentEffects].forEach((e) => e.onDependencyChange());
   }
-
-  // TODO: Add method to check if the computed signal is fresh
+  // TODO: Add isFresh method that returns boolean:
+  // - Return true if _state is FRESH
   isFresh(): boolean {
-    // TODO: Return true if state is FRESH
     return this._state === ComputedState.FRESH;
   }
 
-  // TODO: Add method to check if the computed signal is stale
+  // TODO: Add isStale method that returns boolean:
+  // - Return true if _state is STALE
   isStale(): boolean {
-    // TODO: Return true if state is STALE
     return this._state === ComputedState.STALE;
   }
 
-  // TODO: Add method to force recomputation (useful for debugging)
-  invalidate(): void {
-    // TODO: Mark as stale to force recomputation on next access
+  // TODO: Add invalidate method to force recomputation:
+  // - If _state is FRESH, set it to STALE
+  invalidate() {
     if (this._state === ComputedState.FRESH) {
       this._state = ComputedState.STALE;
     }
   }
 
-  // TODO: Override peek() method for computed signals
-  peek(): T {
-    // TODO: For computed signals, peek should return cached value if fresh,
-    // or trigger computation if stale, but without registering dependencies
-    const prevContext = evalContext;
-    evalContext = undefined;
-    try {
-      return this.value;
-    } finally {
-      evalContext = prevContext;
+  // TODO: Override peek() method for computed signals:
+  peak(): T | undefined {
+    // - For computed signals, peek should return cached value if fresh,
+    if (this._state === ComputedState.FRESH) {
+      return this._value;
+    }
+
+    //   or trigger computation if stale, but without registering dependencies
+    // - Save current evalContext, set to undefined, try to access value, finally restore context
+    if (this._state === ComputedState.STALE) {
+      const prevContext = getContext();
+      setContext(undefined);
+      const newVal = this._computeFn();
+      setContext(prevContext);
+      return newVal;
     }
   }
 }
@@ -215,8 +239,8 @@ export class ComputedSignal<T> extends ReactiveSignal<T> {
  * Factory function to create computed signals (matches Preact API)
  */
 export function computed<T>(computeFn: () => T): ComputedSignal<T> {
-  // TODO: Return new ComputedSignal instance
-  return new ComputedSignal(computeFn);
+  const s = new ComputedSignal(computeFn);
+  return s;
 }
 
 /**
@@ -227,7 +251,6 @@ export function demonstrateComputed(): void {
   console.log("=== Phase 3: Computed Signals Demo ===");
 
   // TODO: Import effect and reactiveSignal from previous phases
-  const { effect, reactiveSignal } = require("./02-effects.ts");
 
   // Test cases to verify:
 
@@ -300,7 +323,7 @@ export function demonstrateComputed(): void {
     age.value = -5;
     console.log("This should throw:", errorProne.value);
   } catch (error) {
-    console.log("Caught error:", error.message);
+    console.log("Caught error:", (error as Error).message);
   }
 
   // 8. Cycle detection
@@ -312,14 +335,15 @@ export function demonstrateComputed(): void {
   console.log("🔍 Key Discoveries:");
   console.log("• Computed signals are lazy - they only compute when needed");
   console.log("• They cache results until dependencies change");
-  console.log("• They enable fine-grained reactivity in complex dependency graphs");
+  console.log(
+    "• They enable fine-grained reactivity in complex dependency graphs"
+  );
   console.log("• They can depend on other computed signals forming chains");
   console.log("• Effects can depend on computed signals for efficient updates");
   console.log("• Error handling preserves reactive behavior\n");
 }
 
-// TODO: Export evalContext and other utilities for debugging
-export { ComputedState };
+// TODO: Export ComputedState enum for debugging
 
 // Run demonstration when this file is executed directly
 // TODO: Uncomment after implementation
