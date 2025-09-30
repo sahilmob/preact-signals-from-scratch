@@ -19,12 +19,16 @@ import {
   ComputedSignal,
   computed,
   ComputedState,
-  demonstrateComputed
-} from "./03-computed.js";
-import { reactiveSignal, effect, Effect } from "./02-effects.js";
+  demonstrateComputed,
+} from "./03-computed.ts";
+import {
+  reactiveSignal,
+  effect,
+  Effect,
+  ReactiveSignal,
+} from "./02-effects.ts";
 
 describe("Phase 3: Computed Signals", () => {
-
   describe("ComputedSignal Class", () => {
     let source: ReturnType<typeof reactiveSignal>;
     let computeFn: ReturnType<typeof vi.fn>;
@@ -32,22 +36,25 @@ describe("Phase 3: Computed Signals", () => {
 
     beforeEach(() => {
       // TODO: Set up basic computed signal for testing
+      source = reactiveSignal(42);
+      computeFn = vi.fn().mockImplementation(() => source.value + 2);
+      computedSig = computed(computeFn);
     });
 
     it("should create computed signal with computation function", () => {
-      // TODO: Test that computed signal is created with proper function
+      expect(computedSig.value).toEqual(44);
     });
 
     it("should extend ReactiveSignal", () => {
-      // TODO: Test inheritance from ReactiveSignal
+      expect(computedSig).toBeInstanceOf(ReactiveSignal);
     });
 
     it("should be read-only (throw error on direct assignment)", () => {
-      // TODO: Test that setting .value directly throws error
+      expect(() => (computedSig.value = 12)).toThrow();
     });
 
     it("should initially be in STALE state", () => {
-      // TODO: Test initial state is STALE
+      expect(computedSig.isStale).toBeTruthy();
     });
   });
 
@@ -57,23 +64,27 @@ describe("Phase 3: Computed Signals", () => {
     let computedSig: ComputedSignal<string>;
 
     beforeEach(() => {
-      // TODO: Set up test signals and computed
+      source = reactiveSignal("hello");
+      computeFn = vi.fn().mockImplementation(() => source.value + " world");
+      computedSig = computed(computeFn);
     });
 
     it("should not compute until value is accessed", () => {
-      // TODO: Test that computation function isn't called on creation
+      expect((computedSig as any)._value).toEqual(undefined);
     });
 
     it("should compute when value is first accessed", () => {
-      // TODO: Test that accessing .value triggers computation
+      expect(computedSig.value).toEqual("hello world");
     });
 
     it("should return computed value correctly", () => {
-      // TODO: Test that computed value is returned correctly
+      expect(computedSig.value).toEqual("hello world");
+      expect(computedSig.value).toEqual("hello world");
     });
 
     it("should cache result after first computation", () => {
-      // TODO: Test that second access doesn't recompute
+      expect(computedSig.value).toEqual("hello world");
+      expect((computedSig as any)._value).toEqual("hello world");
     });
 
     it("should use cached value for multiple accesses", () => {
@@ -87,7 +98,11 @@ describe("Phase 3: Computed Signals", () => {
     let computedSig: ComputedSignal<string>;
 
     beforeEach(() => {
-      // TODO: Set up test scenario
+      source = reactiveSignal("hello");
+      computeFn = vi
+        .fn()
+        .mockImplementation(() => () => source.value + " world");
+      computedSig = computed(computeFn);
     });
 
     it("should invalidate when dependency changes", () => {

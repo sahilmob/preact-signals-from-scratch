@@ -194,7 +194,7 @@ export class ComputedSignal<T> extends ReactiveSignal<T> implements IEffect {
   private _notifyDependentEffects() {
     // TODO: Add private _notifyDependentEffects method:
     // - Convert _dependentEffects to array and forEach, calling effect.onDependencyChange()
-    [...this._dependentEffects].forEach((e) => e.onDependencyChange());
+    this._dependentEffects.forEach((e) => e.onDependencyChange());
   }
   // TODO: Add isFresh method that returns boolean:
   // - Return true if _state is FRESH

@@ -173,7 +173,7 @@ export class ReactiveSignal<T = any> extends Signal<T> {
     this._dependentEffects = new Set();
   }
 
-  get value(): T | undefined {
+  get value(): T {
     console.log("👀 Signal getter called");
     // TODO: Check if there's a current evalContext (an effect is running)
     if (evalContext) {
