@@ -106,11 +106,13 @@ describe("Phase 3: Computed Signals", () => {
     });
 
     it("should invalidate when dependency changes", () => {
-      // TODO: Test that changing source marks computed as stale
+      source.value = "foo";
+      expect(computedSig.isStale).toBeTruthy();
     });
 
     it("should recompute when accessed after invalidation", () => {
-      // TODO: Test recomputation after dependency change
+      source.value = "foo";
+      expect(computedSig.value).toEqual("foo world");
     });
 
     it("should update cached value after recomputation", () => {

@@ -149,7 +149,7 @@ export class ComputedSignal<T> extends ReactiveSignal<T> implements IEffect {
       this._value = newVal;
       this._notifyDependentEffects();
       this._state = ComputedState.FRESH;
-      return newVal;
+      return this._value;
       //        * Update _value to newValue
       //        * Call _notifyDependentEffects()
       //      - Set _state to FRESH
