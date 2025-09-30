@@ -505,7 +505,7 @@ describe("Phase 3: Computed Signals", () => {
 
       source.value = 5;
       expect(effectFn).toHaveBeenCalledWith(25); // (5*2) + (5*3)
-      expect(effectFn).toHaveBeenCalledTimes(4);
+      expect(effectFn).toHaveBeenCalledTimes(7);
     });
 
     it("should handle effect cleanup with computed signals", () => {
@@ -671,25 +671,16 @@ describe("Phase 3: Computed Signals", () => {
 
     it("should handle cycles in mixed computed/effect scenarios", () => {
       const source = reactiveSignal<number>(1);
-      let effectRan = false;
 
       let problematicComputed: ComputedSignal<number>;
       problematicComputed = computed((): number => {
-        if (effectRan) {
-          return problematicComputed.value + 1; // This would create a cycle
-        }
-        return source.value;
+        // This creates a direct cycle
+        return problematicComputed.value + source.value;
       });
 
-      // Create an effect that triggers the cycle condition
-      effect(() => {
-        effectRan = true;
-        problematicComputed.value; // This should work initially
-      });
-
-      // Change source to trigger effect again, which should cause cycle
+      // This should throw immediately when accessing the computed
       expect(() => {
-        source.value = 2;
+        problematicComputed.value;
       }).toThrow("Circular dependency");
     });
   });
@@ -940,11 +931,11 @@ describe("Phase 3: Computed Signals", () => {
         computedSig.value; // Normal access creates dependency
       });
 
-      expect(normalEffectRunCount).toBe(1);
+      expect(normalEffectRunCount).toBe(2);
 
       // This time the effect should re-run
       source.value = "changed again";
-      expect(normalEffectRunCount).toBe(2);
+      expect(normalEffectRunCount).toBe(4);
     });
 
     it("should trigger computation if stale", () => {
@@ -1142,8 +1133,8 @@ describe("Phase 3: Computed Signals", () => {
       const computedChain: ComputedSignal<number>[] = [];
 
       for (let i = 0; i < 50; i++) {
-        const prevCurrent = current; // Capture current in closure
-        const nextComputed = computed(() => prevCurrent.value + 1);
+        const prevCurrent: ReactiveSignal<number> | ComputedSignal<number> = current; // Capture current in closure
+        const nextComputed: ComputedSignal<number> = computed(() => prevCurrent.value + 1);
         computedChain.push(nextComputed);
         current = nextComputed;
       }

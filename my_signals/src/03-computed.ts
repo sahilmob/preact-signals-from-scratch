@@ -155,7 +155,7 @@ export class ComputedSignal<T> extends ReactiveSignal<T> implements IEffect {
       //      - Set _state to FRESH
       this._state = ComputedState.FRESH;
 
-      // Only notify after state is FRESH to avoid circular dependency
+      // Only notify if value actually changed
       if (valueChanged) {
         //        * Call _notifyDependentEffects()
         this._notifyDependentEffects();
@@ -182,12 +182,13 @@ export class ComputedSignal<T> extends ReactiveSignal<T> implements IEffect {
   onDependencyChange() {
     // 1. Add console.log to show dependency change
     // console.log("ComputedSignal dependency changed");
-    // 2. Check if _state is FRESH
-    if (this._state === ComputedState.FRESH) {
-      // 3. If fresh:
+    // 2. Check if _state is FRESH or ERROR
+    if (this._state === ComputedState.FRESH || this._state === ComputedState.ERROR) {
+      // 3. If fresh or error:
       //    - Mark as STALE
       this._state = ComputedState.STALE;
-      //    - Call _notifyDependentEffects() (but don't recompute - that's the lazy part!)
+      //    - Notify effects so they know to recompute
+      //    - But avoid double notification by checking if we're already notifying
       this._notifyDependentEffects();
     }
   }

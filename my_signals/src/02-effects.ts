@@ -110,18 +110,9 @@ export class Effect implements IEffect {
     if (this._isDisposed) {
       return;
     }
-    // if (this._isPending) {
-    //   console.log("⏳ Effect already pending, skipping");
-    //   return;
-    // }
-    // TODO: This is called when one of our dependency signals changes
-    // TODO: Use setTimeout to defer execution and avoid infinite loops during signal updates
-    // this._isPending = true;
-    if (!this._isDisposed) {
-      // this._isPending = false;
-      this._run();
-    }
-    // TODO: Later in Phase 5 (batching), this will be more sophisticated
+
+    // Run effects immediately for now - optimization can be added later
+    this._run();
   }
 
   addDependency(signal: ReactiveSignal<any>): void {
