@@ -98,9 +98,9 @@ export class LinkedReactiveSignal<T = any> extends ReactiveSignal<T> {
     // TODO: Insert at head of linked list:
     //   - If _depsHead exists, set its prevDep to new node
     //   - Set new node's nextDep to current _depsHead
-    // if (this._depsHead) {
-    //   this._depsHead.nextDep = node;
-    // }
+    if (this._depsHead) {
+      this._depsHead.prevDep = node;
+    }
     //   - Set _depsHead to new node
     this._depsHead = node;
     // TODO: Return unsubscribe function that removes this node from the linked list:

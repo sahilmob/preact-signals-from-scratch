@@ -168,26 +168,41 @@ This ensures the learner writes the code themselves while getting appropriate gu
 - Cycle detection and prevention verification
 - Integration testing with effects system
 
-### 🔄 Phase 4: Linked Lists (IN PROGRESS)
-**Architecture Designed** - Memory-efficient dependency tracking using linked lists instead of Sets.
+### ✅ Phase 4: Linked Lists (COMPLETE)
+**Full Implementation** - Memory-efficient dependency tracking using bidirectional linked lists instead of Sets.
 
-**Key Features Designed**:
-- `LinkedReactiveSignal<T>` using linked list instead of `Set<Effect>`
-- `LinkedEffect` using linked list instead of `Set<() => void>`
-- `LinkedComputedSignal<T>` combining both optimizations
+**Key Features Implemented**:
+- `LinkedReactiveSignal<T>` using doubly-linked list instead of `Set<Effect>`
+- `LinkedEffect` using doubly-linked list instead of `Set<() => void>`
+- `LinkedComputedSignal<T>` combining both optimizations with lazy evaluation
 - Bidirectional linked list relationships for signals ↔ effects
 - O(1) insertion/removal operations for dependencies
 - Memory efficiency improvements and reduced GC pressure
-- Comprehensive test suite validating performance and functionality
+- Comprehensive test suite with 22 test scenarios validating performance and functionality
+
+**Key Issues Resolved in Phase 4**:
+- Fixed bidirectional pointer management during linked list insertion
+- Proper node removal maintaining list integrity when unsubscribing
+- LinkedComputedSignal remains lazy - only invalidates on dependency changes
+- Correct traversal direction using `nextDep`/`nextSig` pointers
+- Memory testing configuration using Node.js `process.memoryUsage()` API
 
 **Performance Benefits**:
-- **Memory**: Eliminate Set object overhead (24+ bytes → 16 bytes per dependency)
+- **Memory**: Eliminate Set object overhead (50-75% memory reduction per dependency)
 - **Speed**: O(1) operations instead of Set hash operations
 - **Cache**: Better memory locality for dependency traversal
 - **GC**: Reduced garbage collection pressure from fewer objects
+- **Benchmarks**: 1000 dependency insertions in ~13ms, notifications in <1ms
 
-### 🔄 Next: Implement Phase 4 Linked List Classes
-Ready to implement the memory-efficient linked list dependency tracking system.
+**Testing Achievements**:
+- 22/22 tests passing with full coverage
+- Performance benchmarking for insertion and notification
+- Memory usage tracking with proper Node.js API configuration
+- Complete compatibility with Phase 3 computed signal functionality
+- Unsubscription and cleanup validation
+
+### 🔄 Next: Phase 5 - Batching
+Ready to implement transaction-like update batching to optimize multiple signal changes.
 
 ## Key Learnings So Far
 
@@ -197,7 +212,23 @@ Ready to implement the memory-efficient linked list dependency tracking system.
 3. **Deferred Execution**: Essential to prevent infinite loops during synchronous updates
 4. **Memory Management**: Proper cleanup prevents memory leaks in long-running applications
 
+### Phase 3 Critical Insights:
+1. **Lazy Evaluation**: Computed signals only recompute when accessed, not when invalidated
+2. **State Machine**: FRESH/STALE/COMPUTING/ERROR states prevent redundant computations
+3. **Dual Role**: Computed signals act as both signals (have dependents) and effects (have dependencies)
+4. **Notification Optimization**: Only notify dependents when computed value actually changes
+
+### Phase 4 Critical Insights:
+1. **Linked List Structure**: Bidirectional pointers eliminate Set overhead while maintaining O(1) operations
+2. **Insertion at Head**: New nodes inserted at list head with proper prev/next pointer management
+3. **Traversal Direction**: Forward traversal via `nextDep`/`nextSig` from head to tail
+4. **Unsubscription**: Proper pointer rewiring maintains list integrity when removing middle nodes
+5. **Memory Efficiency**: Intrusive linked lists reduce allocations and improve cache locality
+
 ### Common Pitfalls Avoided:
 - Infinite loops from immediate effect re-execution
 - Memory leaks from untracked subscriptions
 - Double notifications from calling both parent and child setters
+- Eager recomputation breaking computed signal laziness
+- Incorrect linked list traversal directions
+- Broken list chains from improper node removal

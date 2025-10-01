@@ -80,7 +80,6 @@ describe("Phase 4: Linked Lists - Memory-Efficient Dependency Tracking", () => {
         signal.subscribeEffect({
           addDependency: vi.fn(),
           onDependencyChange: effect,
-          _unsubscribeFunctions: new Set(),
         })
       );
 
@@ -307,18 +306,22 @@ describe("Phase 4: Linked Lists - Memory-Efficient Dependency Tracking", () => {
       // With linked lists, each dependency is just 2-3 pointers
       // vs Set which has overhead for hash table, buckets, etc.
 
-      const beforeMem = (performance as any).memory?.usedJSHeapSize || 0;
+      // Force garbage collection if available
+      if (global.gc) {
+        global.gc();
+      }
+
+      const beforeMem = process.memoryUsage().heapUsed;
 
       // Create many dependencies
       const unsubscribes = Array.from({ length: 100 }, () =>
         signal.subscribeEffect({
           addDependency: vi.fn(),
           onDependencyChange: vi.fn(),
-          _unsubscribeFunctions: new Set(),
         })
       );
 
-      const afterMem = (performance as any).memory?.usedJSHeapSize || 0;
+      const afterMem = process.memoryUsage().heapUsed;
       const memUsed = afterMem - beforeMem;
 
       console.log(`Memory used for 100 dependencies: ${memUsed} bytes`);
