@@ -127,21 +127,7 @@ export class LinkedReactiveSignal<T = any> extends ReactiveSignal<T> {
   }
 
   set value(newValue: T) {
-    const oldValue = this._value;
-    // TODO: If the value actually changed, notify all dependent effects:
-    if (Object.is(newValue, oldValue)) return;
-
-    // Set the value directly
-    this._value = newValue;
-
-    // // Notify regular subscribers from parent class
-    this._subscribers.forEach((callback) => {
-      try {
-        callback(newValue);
-      } catch (err) {
-        console.log(err);
-      }
-    });
+    super.value = newValue;
 
     this._notifyDependentEffects();
   }
