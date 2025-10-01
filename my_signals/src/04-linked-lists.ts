@@ -44,9 +44,13 @@ import {
  */
 interface SignalNode {
   // TODO: Add effect property that this node points to (type: IEffect)
+  effect: IEffect;
   // TODO: Add nextDep property for next effect in the dependency chain (type: SignalNode | undefined)
+  nextDep: SignalNode | undefined;
   // TODO: Add prevDep property for previous effect in the dependency chain (type: SignalNode | undefined)
+  prevDep: SignalNode | undefined;
   // TODO: Add signal property pointing back to the signal (type: LinkedReactiveSignal<any>)
+  signal: LinkedReactiveSignal<any>;
 }
 
 /**
@@ -55,35 +59,66 @@ interface SignalNode {
  */
 interface EffectNode {
   // TODO: Add signal property that this node points to (type: LinkedReactiveSignal<any>)
+  signal: LinkedReactiveSignal<any>;
   // TODO: Add nextSig property for next signal in the dependency chain (type: EffectNode | undefined)
+  nextSig: EffectNode | undefined;
   // TODO: Add prevSig property for previous signal in the dependency chain (type: EffectNode | undefined)
+  prevSig: EffectNode | undefined;
   // TODO: Add effect property pointing back to the effect (type: LinkedEffect)
+  effect: LinkedEffect;
 }
 
 // TODO: Create LinkedReactiveSignal that uses linked lists instead of Sets
 export class LinkedReactiveSignal<T = any> extends ReactiveSignal<T> {
   // TODO: Replace _dependentEffects Set with linked list head
   // TODO: Add _depsHead property (type: SignalNode | undefined) - head of effects that depend on this signal
+  protected _depsHead?: SignalNode;
 
   constructor(initialValue: T) {
     // TODO: Call parent constructor
+    super(initialValue);
     // TODO: Initialize _depsHead as undefined
+    this._depsHead = undefined;
   }
 
   // TODO: Override subscribeEffect to use linked list insertion
   subscribeEffect(effect: IEffect): () => void {
     // TODO: Create new SignalNode
+    const signal = this;
     // TODO: Set node.effect = effect
     // TODO: Set node.signal = this
+    const node: SignalNode = {
+      effect,
+      signal,
+      prevDep: this._depsHead,
+      nextDep: undefined,
+    };
+
     // TODO: Insert at head of linked list:
     //   - If _depsHead exists, set its prevDep to new node
     //   - Set new node's nextDep to current _depsHead
+    if (this._depsHead) {
+      this._depsHead.nextDep = node;
+    }
     //   - Set _depsHead to new node
-
+    this._depsHead = node;
     // TODO: Return unsubscribe function that removes this node from the linked list:
-    //   - If node has prevDep, set prevDep.nextDep = node.nextDep
-    //   - If node has nextDep, set nextDep.prevDep = node.prevDep
-    //   - If node is head (_depsHead), set _depsHead = node.nextDep
+    return () => {
+      if (node.prevDep) {
+        //   - If node has prevDep, set prevDep.nextDep = node.nextDep
+        node.prevDep.nextDep = node.nextDep;
+      }
+
+      if (node.nextDep) {
+        //   - If node has nextDep, set nextDep.prevDep = node.prevDep
+        node.nextDep.prevDep = node.prevDep;
+      }
+
+      //   - If node is head (_depsHead), set _depsHead = node.nextDep
+      if (this._depsHead === node) {
+        this._depsHead = node.nextDep;
+      }
+    };
   }
 
   // TODO: Override _notifyDependentEffects to traverse linked list
@@ -118,7 +153,6 @@ export class LinkedEffect implements IEffect {
     //   - If _sigsHead exists, set its prevSig to new node
     //   - Set new node's nextSig to current _sigsHead
     //   - Set _sigsHead to new node
-
     // TODO: Subscribe to the signal (this will create the reverse SignalNode)
     // TODO: Store unsubscribe function in the node for cleanup
   }
@@ -157,7 +191,10 @@ export class LinkedEffect implements IEffect {
 }
 
 // TODO: Create LinkedComputedSignal that combines linked lists with computed functionality
-export class LinkedComputedSignal<T> extends LinkedReactiveSignal<T> implements IEffect {
+export class LinkedComputedSignal<T>
+  extends LinkedReactiveSignal<T>
+  implements IEffect
+{
   // TODO: Add all computed signal properties from Phase 3
   // TODO: Add linked list properties for tracking dependencies as an effect
 
@@ -173,8 +210,12 @@ export class LinkedComputedSignal<T> extends LinkedReactiveSignal<T> implements 
 /**
  * Factory functions using linked list implementations
  */
-export function linkedReactiveSignal<T>(initialValue: T): LinkedReactiveSignal<T>;
-export function linkedReactiveSignal<T = undefined>(): LinkedReactiveSignal<T | undefined>;
+export function linkedReactiveSignal<T>(
+  initialValue: T
+): LinkedReactiveSignal<T>;
+export function linkedReactiveSignal<T = undefined>(): LinkedReactiveSignal<
+  T | undefined
+>;
 export function linkedReactiveSignal<T>(initialValue?: T) {
   // TODO: Return new LinkedReactiveSignal
 }
