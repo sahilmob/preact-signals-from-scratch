@@ -5,7 +5,7 @@
  * all functionality from previous phases while improving performance.
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import {
   LinkedReactiveSignal,
   LinkedEffect,
@@ -115,7 +115,7 @@ describe("Phase 4: Linked Lists - Memory-Efficient Dependency Tracking", () => {
     });
 
     it("should create and execute effect immediately", () => {
-      effect = new LinkedEffect(mockFn);
+      effect = new LinkedEffect(mockFn as any);
       expect(mockFn).toHaveBeenCalledTimes(1);
     });
 
@@ -393,7 +393,9 @@ describe("Phase 4: Linked Lists - Memory-Efficient Dependency Tracking", () => {
   describe("Memory Management", () => {
     it("should properly cleanup linked list nodes on disposal", () => {
       const signal = linkedReactiveSignal<number>(1);
-      const effect = new LinkedEffect(() => signal.value);
+      const effect = new LinkedEffect(() => {
+        signal.value;
+      });
 
       // Verify connection exists
       expect((signal as any)._depsHead).toBeDefined();

@@ -65,7 +65,7 @@ interface EffectNode {
   // TODO: Add prevSig property for previous signal in the dependency chain (type: EffectNode | undefined)
   prevSig: EffectNode | undefined;
   // TODO: Add effect property pointing back to the effect (type: LinkedEffect)
-  effect: LinkedEffect;
+  effect: IEffect;
   unSub?: () => void;
 }
 
