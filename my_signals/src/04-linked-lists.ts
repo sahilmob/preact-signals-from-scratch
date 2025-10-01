@@ -91,16 +91,16 @@ export class LinkedReactiveSignal<T = any> extends ReactiveSignal<T> {
     const node: SignalNode = {
       effect,
       signal,
-      prevDep: this._depsHead,
-      nextDep: undefined,
+      prevDep: undefined,
+      nextDep: this._depsHead,
     };
 
     // TODO: Insert at head of linked list:
     //   - If _depsHead exists, set its prevDep to new node
     //   - Set new node's nextDep to current _depsHead
-    if (this._depsHead) {
-      this._depsHead.nextDep = node;
-    }
+    // if (this._depsHead) {
+    //   this._depsHead.nextDep = node;
+    // }
     //   - Set _depsHead to new node
     this._depsHead = node;
     // TODO: Return unsubscribe function that removes this node from the linked list:
@@ -154,7 +154,7 @@ export class LinkedReactiveSignal<T = any> extends ReactiveSignal<T> {
       // TODO: For each SignalNode, call node.effect.onDependencyChange()
       current.effect.onDependencyChange();
       // TODO: Move to node.nextDep until reaching end (undefined)
-      current = current.prevDep;
+      current = current.nextDep;
     }
   }
 }
@@ -410,34 +410,11 @@ export class LinkedComputedSignal<T>
     }
   }
 
-  // TODO: Implement _run method with linked list cleanup
-  private _run(): void {
-    // TODO: Check if disposed
-    if (this._isDisposed) {
-      return;
-    }
-
-    // TODO: Unsubscribe from all dependencies by traversing _sigsHead linked list
-    this._clearDependencies();
-    // TODO: Set up new evaluation context
-    const prevCtx = getContext();
-    setContext(this);
-    try {
-      // TODO: Execute _fn and handle cleanup/errors
-      this._computeFn?.();
-    } catch (error) {
-      console.log(error);
-    } finally {
-      // TODO: Restore evaluation context
-      setContext(prevCtx);
-    }
-  }
   onDependencyChange(): void {
     // TODO: Check if disposed
     if (this._isDisposed) return;
     this._state = ComputedState.STALE;
-    // TODO: Call _run()
-    this._run();
+    this._notifyDependentEffects();
   }
 
   dispose(): void {
