@@ -31,6 +31,7 @@ import {
   getContext,
   setContext,
   IEffect,
+  IUnsubscribe,
 } from "./02-effects.ts";
 
 // TODO: Define an enum called ComputedState with four states:
@@ -56,7 +57,10 @@ type ComputedState = (typeof ComputedState)[keyof typeof ComputedState];
  * 3. Results are cached until dependencies change
  * 4. Cannot be written to (read-only)
  */
-export class ComputedSignal<T> extends ReactiveSignal<T> implements IEffect {
+export class ComputedSignal<T>
+  extends ReactiveSignal<T>
+  implements IEffect, IUnsubscribe
+{
   // TODO: Add private _computeFn property to store the computation function (type: () => T)
 
   private _computeFn: () => T;
@@ -183,7 +187,10 @@ export class ComputedSignal<T> extends ReactiveSignal<T> implements IEffect {
     // 1. Add console.log to show dependency change
     // console.log("ComputedSignal dependency changed");
     // 2. Check if _state is FRESH or ERROR
-    if (this._state === ComputedState.FRESH || this._state === ComputedState.ERROR) {
+    if (
+      this._state === ComputedState.FRESH ||
+      this._state === ComputedState.ERROR
+    ) {
       // 3. If fresh or error:
       //    - Mark as STALE
       this._state = ComputedState.STALE;

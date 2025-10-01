@@ -26,9 +26,12 @@ import { Signal } from "./01-basic-signal.ts";
 // When a signal's .value is read, it checks this variable
 
 export interface IEffect {
-  _unsubscribeFunctions: Set<() => void>;
   addDependency(signal: ReactiveSignal<any>): void;
   onDependencyChange(): void;
+}
+
+export interface IUnsubscribe {
+  _unsubscribeFunctions: Set<() => void>;
 }
 
 type CTX = IEffect | undefined;
@@ -38,7 +41,7 @@ export const getContext = () => evalContext;
 export const setContext = (ctx: CTX) => (evalContext = ctx);
 
 // TODO: Define Effect class
-export class Effect implements IEffect {
+export class Effect implements IEffect, IUnsubscribe {
   // TODO: Add private _fn property to store the effect callback function
   private _fn?: Function;
   // TODO: Add private _cleanup property to store optional cleanup function returned by _fn

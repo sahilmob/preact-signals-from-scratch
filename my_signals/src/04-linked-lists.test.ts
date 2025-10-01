@@ -19,7 +19,6 @@ import {
 } from "./04-linked-lists.ts";
 
 describe("Phase 4: Linked Lists - Memory-Efficient Dependency Tracking", () => {
-
   describe("LinkedReactiveSignal", () => {
     let signal: LinkedReactiveSignal<number>;
 
@@ -55,13 +54,11 @@ describe("Phase 4: Linked Lists - Memory-Efficient Dependency Tracking", () => {
       const unsub1 = signal.subscribeEffect({
         addDependency: vi.fn(),
         onDependencyChange: effect1,
-        _unsubscribeFunctions: new Set()
       });
 
       const unsub2 = signal.subscribeEffect({
         addDependency: vi.fn(),
         onDependencyChange: effect2,
-        _unsubscribeFunctions: new Set()
       });
 
       // Verify linked list structure exists (internal implementation)
@@ -79,23 +76,23 @@ describe("Phase 4: Linked Lists - Memory-Efficient Dependency Tracking", () => {
 
     it("should handle effect unsubscription correctly in linked list", () => {
       const effects = Array.from({ length: 5 }, () => vi.fn());
-      const unsubscribes = effects.map(effect =>
+      const unsubscribes = effects.map((effect) =>
         signal.subscribeEffect({
           addDependency: vi.fn(),
           onDependencyChange: effect,
-          _unsubscribeFunctions: new Set()
+          _unsubscribeFunctions: new Set(),
         })
       );
 
       // All effects should be called
       signal.value = 100;
-      effects.forEach(effect => expect(effect).toHaveBeenCalled());
+      effects.forEach((effect) => expect(effect).toHaveBeenCalled());
 
       // Unsubscribe middle effect
       unsubscribes[2]();
 
       // Reset mocks and trigger again
-      effects.forEach(effect => effect.mockClear());
+      effects.forEach((effect) => effect.mockClear());
       signal.value = 200;
 
       // All except unsubscribed effect should be called
@@ -241,7 +238,7 @@ describe("Phase 4: Linked Lists - Memory-Efficient Dependency Tracking", () => {
 
     it("should handle computed chains with linked lists", () => {
       const level2 = linkedComputed(() => computed.value + 5); // 25
-      const level3 = linkedComputed(() => level2.value * 2);   // 50
+      const level3 = linkedComputed(() => level2.value * 2); // 50
 
       expect(level3.value).toBe(50); // (10 * 2) + 5) * 2
 
@@ -282,7 +279,7 @@ describe("Phase 4: Linked Lists - Memory-Efficient Dependency Tracking", () => {
         const effect = {
           addDependency: vi.fn(),
           onDependencyChange: vi.fn(),
-          _unsubscribeFunctions: new Set()
+          _unsubscribeFunctions: new Set(),
         };
         effects.push(effect);
         signal.subscribeEffect(effect);
@@ -317,7 +314,7 @@ describe("Phase 4: Linked Lists - Memory-Efficient Dependency Tracking", () => {
         signal.subscribeEffect({
           addDependency: vi.fn(),
           onDependencyChange: vi.fn(),
-          _unsubscribeFunctions: new Set()
+          _unsubscribeFunctions: new Set(),
         })
       );
 
@@ -327,7 +324,7 @@ describe("Phase 4: Linked Lists - Memory-Efficient Dependency Tracking", () => {
       console.log(`Memory used for 100 dependencies: ${memUsed} bytes`);
 
       // Cleanup
-      unsubscribes.forEach(unsub => unsub());
+      unsubscribes.forEach((unsub) => unsub());
 
       // Memory usage should be reasonable
       // (This is more of a monitoring test than assertion)
@@ -341,7 +338,9 @@ describe("Phase 4: Linked Lists - Memory-Efficient Dependency Tracking", () => {
       const firstName = linkedReactiveSignal<string>("John");
       const lastName = linkedReactiveSignal<string>("Doe");
 
-      const fullName = linkedComputed(() => `${firstName.value} ${lastName.value}`);
+      const fullName = linkedComputed(
+        () => `${firstName.value} ${lastName.value}`
+      );
       const greeting = linkedComputed(() => `Hello, ${fullName.value}!`);
 
       expect(greeting.value).toBe("Hello, John Doe!");
@@ -434,7 +433,7 @@ describe("Phase 4: Linked Lists - Memory-Efficient Dependency Tracking", () => {
     let consoleSpy: any;
 
     beforeEach(() => {
-      consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     });
 
     afterEach(() => {
@@ -443,7 +442,9 @@ describe("Phase 4: Linked Lists - Memory-Efficient Dependency Tracking", () => {
 
     it("should run demonstration without errors", () => {
       expect(() => demonstrateLinkedLists()).not.toThrow();
-      expect(consoleSpy).toHaveBeenCalledWith("=== Phase 4: Linked Lists Demo ===");
+      expect(consoleSpy).toHaveBeenCalledWith(
+        "=== Phase 4: Linked Lists Demo ==="
+      );
       expect(consoleSpy).toHaveBeenCalledWith("Phase 4 Complete!");
     });
 

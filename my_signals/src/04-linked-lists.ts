@@ -66,6 +66,7 @@ interface EffectNode {
   prevSig: EffectNode | undefined;
   // TODO: Add effect property pointing back to the effect (type: LinkedEffect)
   effect: LinkedEffect;
+  unSub?: () => void;
 }
 
 // TODO: Create LinkedReactiveSignal that uses linked lists instead of Sets
@@ -121,72 +122,158 @@ export class LinkedReactiveSignal<T = any> extends ReactiveSignal<T> {
     };
   }
 
+  get value() {
+    return super.value;
+  }
+
+  set value(newValue: T) {
+    const oldValue = this._value;
+    // TODO: If the value actually changed, notify all dependent effects:
+    if (Object.is(newValue, oldValue)) return;
+
+    // Set the value directly
+    this._value = newValue;
+
+    // // Notify regular subscribers from parent class
+    this._subscribers.forEach((callback) => {
+      try {
+        callback(newValue);
+      } catch (err) {
+        console.log(err);
+      }
+    });
+
+    this._notifyDependentEffects();
+  }
+
   // TODO: Override _notifyDependentEffects to traverse linked list
   protected _notifyDependentEffects() {
     // TODO: Start from _depsHead and traverse the linked list
-    // TODO: For each SignalNode, call node.effect.onDependencyChange()
-    // TODO: Move to node.nextDep until reaching end (undefined)
+    let current = this._depsHead;
+    while (current) {
+      // TODO: For each SignalNode, call node.effect.onDependencyChange()
+      current.effect.onDependencyChange();
+      // TODO: Move to node.nextDep until reaching end (undefined)
+      current = current.prevDep;
+    }
   }
 }
 
 // TODO: Create LinkedEffect that uses linked lists for dependency tracking
 export class LinkedEffect implements IEffect {
   // TODO: Add private _fn property (type: Function)
+  private _fn?: Function;
   // TODO: Add private _cleanup property (type: Function | undefined)
+  private _cleanup: Function | undefined;
   // TODO: Add private _isDisposed property (type: boolean)
+  private _isDisposed: boolean;
 
   // TODO: Replace _unsubscribeFunctions Set with linked list
   // TODO: Add _sigsHead property (type: EffectNode | undefined) - head of signals this effect depends on
+  private _sigsHead: EffectNode | undefined;
 
   constructor(fn: () => void | (() => void)) {
     // TODO: Initialize _fn, _cleanup, _isDisposed
+    this._fn = fn;
+    this._cleanup = undefined;
+    this._isDisposed = false;
     // TODO: Initialize _sigsHead as undefined
+    this._sigsHead = undefined;
     // TODO: Call _run() to execute immediately
+    this._run();
   }
 
   // TODO: Implement addDependency using linked list insertion
   addDependency(signal: LinkedReactiveSignal<any>): void {
     // TODO: Create new EffectNode
-    // TODO: Set node.signal = signal
-    // TODO: Set node.effect = this
-    // TODO: Insert at head of signals linked list:
-    //   - If _sigsHead exists, set its prevSig to new node
+    const effect = this;
+    const node: EffectNode = {
+      // TODO: Set node.signal = signal
+      signal,
+      // TODO: Set node.effect = this
+      effect,
+      // TODO: Insert at head of signals linked list:
+      nextSig: undefined,
+      prevSig: undefined,
+      unSub: undefined,
+    };
+    if (this._sigsHead) {
+      //   - If _sigsHead exists, set its prevSig to new node
+      this._sigsHead.prevSig = node;
+    }
+
     //   - Set new node's nextSig to current _sigsHead
+    node.nextSig = this._sigsHead;
     //   - Set _sigsHead to new node
+    this._sigsHead = node;
     // TODO: Subscribe to the signal (this will create the reverse SignalNode)
+    const unsub = signal.subscribeEffect(this);
     // TODO: Store unsubscribe function in the node for cleanup
+    node.unSub = unsub;
   }
 
   // TODO: Implement _run method with linked list cleanup
   private _run(): void {
     // TODO: Check if disposed
+    if (this._isDisposed) {
+      return;
+    }
+
     // TODO: Call cleanup function if exists
+    if (typeof this._cleanup === "function") {
+      this._cleanup?.();
+    }
     // TODO: Unsubscribe from all dependencies by traversing _sigsHead linked list
+    this._clearDependencies();
     // TODO: Set up new evaluation context
-    // TODO: Execute _fn and handle cleanup/errors
-    // TODO: Restore evaluation context
+    const prevCtx = getContext();
+    setContext(this);
+    try {
+      // TODO: Execute _fn and handle cleanup/errors
+      this._cleanup = this._fn?.();
+    } catch (error) {
+      console.log(error);
+    } finally {
+      // TODO: Restore evaluation context
+      setContext(prevCtx);
+    }
   }
 
   // TODO: Implement onDependencyChange
   onDependencyChange(): void {
     // TODO: Check if disposed
+    if (this._isDisposed) return;
     // TODO: Call _run()
+    this._run();
   }
 
   // TODO: Implement dispose with linked list cleanup
   dispose(): void {
     // TODO: Set _isDisposed = true
+    this._isDisposed = true;
     // TODO: Call cleanup function
+    if (typeof this._cleanup === "function") {
+      this._cleanup?.();
+    }
     // TODO: Traverse _sigsHead and unsubscribe from all signals
     // TODO: Clear _sigsHead
+    this._clearDependencies();
     // TODO: Clear _fn and _cleanup
+    this._fn = undefined;
+    this._cleanup = undefined;
   }
 
   // TODO: Implement _clearDependencies helper
   private _clearDependencies(): void {
     // TODO: Traverse _sigsHead linked list
+    let current = this._sigsHead;
     // TODO: For each EffectNode, call stored unsubscribe function
+    while (current) {
+      current.unSub?.();
+      current = current.prevSig;
+    }
     // TODO: Set _sigsHead = undefined
+    this._sigsHead = undefined;
   }
 }
 
@@ -196,15 +283,190 @@ export class LinkedComputedSignal<T>
   implements IEffect
 {
   // TODO: Add all computed signal properties from Phase 3
+  private _computeFn: () => T;
+  private _state: ComputedState;
+  private _error: any;
+  private _isComputed = true;
+  private _cleanup: Function | undefined;
   // TODO: Add linked list properties for tracking dependencies as an effect
+  private _isDisposed = false;
+  private _sigsHead: EffectNode | undefined = undefined;
 
   constructor(computeFn: () => T) {
     // TODO: Initialize like ComputedSignal but with linked list base
+    super(undefined as any);
+    this._computeFn = computeFn;
+    this._state = ComputedState.STALE;
+    this._error = undefined;
+  }
+
+  addDependency(signal: LinkedReactiveSignal<any>): void {
+    // TODO: Create new EffectNode
+    const effect = this;
+    const node: EffectNode = {
+      // TODO: Set node.signal = signal
+      signal,
+      // TODO: Set node.effect = this
+      effect,
+      // TODO: Insert at head of signals linked list:
+      nextSig: undefined,
+      prevSig: undefined,
+      unSub: undefined,
+    };
+
+    if (this._sigsHead) {
+      //   - If _sigsHead exists, set its prevSig to new node
+      this._sigsHead.prevSig = node;
+    }
+
+    //   - Set new node's nextSig to current _sigsHead
+    node.nextSig = this._sigsHead;
+    //   - Set _sigsHead to new node
+    this._sigsHead = node;
+    // TODO: Subscribe to the signal (this will create the reverse SignalNode)
+    const unsub = signal.subscribeEffect(this);
+    // TODO: Store unsubscribe function in the node for cleanup
+    node.unSub = unsub;
+  }
+
+  get value() {
+    if (this._state === ComputedState.COMPUTING) {
+      // 2. Check if state is COMPUTING - if so, throw error for circular dependency
+      throw new Error("Circular dependency");
+    }
+
+    if (this._state === ComputedState.ERROR) {
+      // 3. Check if state is ERROR - if so, re-throw the stored error
+      throw this._error;
+    }
+
+    if (evalContext) {
+      evalContext.addDependency(this);
+    }
+
+    if (this._state === ComputedState.FRESH) {
+      return this._value;
+    }
+
+    return this._recompute();
+  }
+
+  set value(_: any) {
+    throw new Error(
+      "Cannot set value of computed signal directly. Computed signals are read-only."
+    );
+  }
+
+  isStale() {
+    return this._state === ComputedState.STALE;
+  }
+
+  isFresh() {
+    return this._state === ComputedState.FRESH;
+  }
+
+  private _recompute() {
+    this._state = ComputedState.COMPUTING;
+    this._error = undefined;
+    const prevContext = getContext();
+    setContext(this);
+    this._clearDependencies();
+
+    try {
+      //      - Execute _computeFn() and store result in newValue
+      const newVal = this._computeFn();
+
+      //      - Check if value changed using Object.is(_value, newValue)
+      // console.log({ newVal, value: this._value });
+      const valueChanged = !Object.is(newVal, this._value);
+      if (valueChanged) {
+        //      - If changed:
+        //        * Update _value to newValue
+        this._value = newVal;
+      }
+      //      - Set _state to FRESH
+      this._state = ComputedState.FRESH;
+
+      // Only notify if value actually changed
+      if (valueChanged) {
+        //        * Call _notifyDependentEffects()
+        this._notifyDependentEffects();
+      }
+
+      //      - Return _value
+      return this._value;
+    } catch (error) {
+      //    catch (error):
+      //      - Store error in _error
+      //      - Set _state to ERROR
+      //      - Re-throw error
+      this._error = error;
+      this._state = ComputedState.ERROR;
+      throw error;
+    } finally {
+      //    finally:
+      //      - Restore evalContext from prevContext
+      setContext(prevContext);
+    }
+  }
+
+  // TODO: Implement _run method with linked list cleanup
+  private _run(): void {
+    // TODO: Check if disposed
+    if (this._isDisposed) {
+      return;
+    }
+
+    // TODO: Unsubscribe from all dependencies by traversing _sigsHead linked list
+    this._clearDependencies();
+    // TODO: Set up new evaluation context
+    const prevCtx = getContext();
+    setContext(this);
+    try {
+      // TODO: Execute _fn and handle cleanup/errors
+      this._computeFn?.();
+    } catch (error) {
+      console.log(error);
+    } finally {
+      // TODO: Restore evaluation context
+      setContext(prevCtx);
+    }
+  }
+  onDependencyChange(): void {
+    // TODO: Check if disposed
+    if (this._isDisposed) return;
+    this._state = ComputedState.STALE;
+    // TODO: Call _run()
+    this._run();
+  }
+
+  dispose(): void {
+    // TODO: Set _isDisposed = true
+    this._isDisposed = true;
+    // TODO: Call cleanup function
+    this?._cleanup?.();
+    // TODO: Traverse _sigsHead and unsubscribe from all signals
+    // TODO: Clear _sigsHead
+    this._clearDependencies();
+    // TODO: Clear _fn and _cleanup
+    this._cleanup = undefined;
   }
 
   // TODO: Implement all methods from ComputedSignal
   // TODO: Use LinkedReactiveSignal base for efficient dependent effect tracking
   // TODO: Use LinkedEffect-style dependency tracking for input signals
+
+  private _clearDependencies(): void {
+    // TODO: Traverse _sigsHead linked list
+    let current = this._sigsHead;
+    // TODO: For each EffectNode, call stored unsubscribe function
+    while (current) {
+      current.unSub?.();
+      current = current.prevSig;
+    }
+    this._sigsHead = undefined;
+    // TODO: Set _sigsHead = undefined
+  }
 }
 
 /**
@@ -217,15 +479,18 @@ export function linkedReactiveSignal<T = undefined>(): LinkedReactiveSignal<
   T | undefined
 >;
 export function linkedReactiveSignal<T>(initialValue?: T) {
-  // TODO: Return new LinkedReactiveSignal
+  return new LinkedReactiveSignal(initialValue);
 }
 
 export function linkedEffect(fn: () => void | (() => void)): () => void {
-  // TODO: Create LinkedEffect and return dispose function
+  const e = new LinkedEffect(fn);
+
+  return () => e.dispose();
 }
 
 export function linkedComputed<T>(computeFn: () => T): LinkedComputedSignal<T> {
   // TODO: Return new LinkedComputedSignal
+  return new LinkedComputedSignal(computeFn);
 }
 
 /**
