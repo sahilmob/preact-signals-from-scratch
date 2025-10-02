@@ -420,11 +420,10 @@ function flushPendingEffects(): void {
     // Check _createdInCurrentBatch to skip effects created during this batch
     arr.forEach((e) => {
       if (e instanceof BatchedEffect) {
-        if (!e['_isDisposed'] && !e['_createdInCurrentBatch']) {
-          e['_run']();
+        const effect = e as any;
+        if (!effect._isDisposed) {
+          effect._run();
         }
-        // Clear the flag so effect can run in future batches
-        e['_createdInCurrentBatch'] = false;
       } else if (e instanceof BatchedComputedSignal) {
         // Computed signals get recomputed when accessed, not during flush
         // They were invalidated during the batch and will recompute lazily

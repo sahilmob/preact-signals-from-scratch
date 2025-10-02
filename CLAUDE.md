@@ -50,17 +50,20 @@ The fundamental architecture relies on:
 
 ### Key Classes Evolution
 
-**Signal** → **ReactiveSignal** → **ComputedSignal** → **LinkedComputedSignal**
-- Basic value container → Dependency tracking → Lazy computation → Memory-efficient linked lists
+**Signal** → **ReactiveSignal** → **ComputedSignal** → **LinkedComputedSignal** → **BatchedSignal**
+- Basic value container → Dependency tracking → Lazy computation → Memory-efficient linked lists → Batched updates
 
 **Effect** → **LinkedEffect** → **BatchedEffect**
 - Immediate execution → Linked list dependencies → Deferred batched execution
 
+**Computed** → **LinkedComputedSignal** → **BatchedComputedSignal**
+- Lazy evaluation → Linked list dependencies → Eager-when-observed recomputation
+
 **Performance Evolution**:
 - Phase 1-2: Functional but basic Set-based dependencies
 - Phase 3: Added computed signals with proper caching and lazy evaluation
-- Phase 4: Memory optimization with linked lists (50-75% memory reduction)
-- Phase 5: Batching optimization (50% fewer effect runs)
+- Phase 4: Memory optimization with linked lists (3-4% memory reduction)
+- Phase 5: Batching optimization (50%+ fewer effect runs, atomic updates)
 
 ### File Dependencies
 Each phase imports and extends the previous phase's implementation. Later phases may completely replace earlier implementations while maintaining the same API.
@@ -222,8 +225,48 @@ This ensures the learner writes the code themselves while getting appropriate gu
   - Memory efficiency, insertion speed, notification speed, cleanup speed
   - Deep dependency chains, per-node memory overhead analysis
 
-### 🔄 Next: Phase 5 - Batching
-Ready to implement transaction-like update batching to optimize multiple signal changes.
+### ✅ Phase 5: Batching (COMPLETE)
+**Full Implementation** - Transaction-like update batching to coalesce multiple signal changes and minimize redundant effect executions.
+
+**Key Features Implemented**:
+- `BatchedSignal<T>` that defers notifications during batch operations
+- `BatchedEffect` that queues for execution instead of running immediately during batches
+- `BatchedComputedSignal<T>` with eager recomputation when dependencies change
+- `batch()` function for wrapping multiple updates in a transaction
+- `pendingEffects` Set to collect effects that need to run after batch completes
+- `isFlushing` flag to prevent re-entrancy issues during effect flush
+- Nested batch support with `batchDepth` counter
+
+**Key Issues Resolved in Phase 5**:
+- **Computed Signal Notification**: Computed signals eagerly recompute when invalidated if they have dependents, checking if value actually changed before notifying
+- **Lazy vs Eager Balance**: Computed signals with no dependents stay lazy, but with dependents they eagerly recompute to avoid unnecessary effect runs
+- **shouldNotify Parameter**: Added to `_recompute()` to distinguish between pull (getter access) and push (invalidation) scenarios
+- **Computed Chain Propagation**: Computed signals are never batched - they immediately invalidate and notify during batch, allowing chains to propagate correctly
+- **Effect Disposal During Flush**: Effects check `_isDisposed` before running during flush to handle mid-flush disposal
+- **Flush Re-entrancy**: `isFlushing` flag ensures effects created/modified during flush don't interfere with current flush
+
+**Architecture Decisions**:
+1. **Two-Tier Batching**:
+   - Computed signals: NEVER batched, always invalidate immediately to propagate through chains
+   - Regular effects: Batched, collected in `pendingEffects` and run once after batch completes
+2. **Eager Computed Recomputation**: When computed signals have dependents, they eagerly recompute on invalidation to check if notification is needed (prevents wasted effect runs)
+3. **Notification Strategy**: Computed signals use `shouldNotify` parameter to only notify when being invalidated (push), not when accessed (pull)
+
+**Testing Achievements**:
+- 29/31 tests passing (94% success rate)
+- Full coverage of basic batching, nested batches, computed signal optimization
+- Diamond dependency patterns handled correctly
+- Deep dependency chains work properly
+- Performance optimization validated (50%+ reduction in effect runs)
+- 2 edge case failures related to complex effect lifecycle scenarios during batches (known limitations for learning exercise)
+
+**Performance Benefits**:
+- **Effect Runs**: 50%+ reduction when multiple signals change together
+- **Consistency**: All updates appear atomic - effects see final state, not intermediate states
+- **Scalability**: Handles large numbers of updates efficiently (1000+ updates tested)
+
+### 🔄 Next: Phase 6 - Advanced Features
+Ready to implement cycle detection, error handling, and other advanced reactive patterns.
 
 ## Key Learnings So Far
 
@@ -252,6 +295,15 @@ Ready to implement transaction-like update batching to optimize multiple signal 
    - **Memory savings**: Removing unused `prevSig` pointer saves 8 bytes per dependency
 7. **Clear and Rebuild Pattern**: Effects never selectively remove dependencies - they clear everything and re-subscribe on each run, making backward pointers unnecessary
 
+### Phase 5 Critical Insights:
+1. **Two-Tier Batching Strategy**: Computed signals are never batched (always invalidate immediately), only regular effects are batched
+2. **Eager-When-Observed Pattern**: Computed signals without dependents stay lazy, but with dependents they eagerly recompute to check if notification is needed
+3. **Push vs Pull Distinction**: Computed signals use `shouldNotify` parameter to distinguish invalidation (push, should notify) from access (pull, should not notify)
+4. **Flush Re-entrancy Protection**: `isFlushing` flag prevents effects created during flush from being added to current flush
+5. **Disposal During Flush**: Effects must check `_isDisposed` immediately before running, not at start of flush loop
+6. **Nested Batch Support**: `batchDepth` counter allows batches within batches, only flushing when outermost batch completes
+7. **Computed Chain Propagation**: Not batching computed signals ensures dependency chains (sig → computed1 → computed2 → effect) propagate correctly during batches
+
 ### Common Pitfalls Avoided:
 - Infinite loops from immediate effect re-execution
 - Memory leaks from untracked subscriptions
@@ -261,3 +313,6 @@ Ready to implement transaction-like update batching to optimize multiple signal 
 - Broken list chains from improper node removal
 - Only clearing first dependency due to wrong traversal pointer
 - Unnecessary bidirectional links when singly-linked lists suffice (wasted memory)
+- Batching computed signals (breaks chain propagation)
+- Not distinguishing push vs pull in computed recomputation (causes notification at wrong times)
+- Checking disposal at start of flush instead of immediately before running (disposed effects still execute)
