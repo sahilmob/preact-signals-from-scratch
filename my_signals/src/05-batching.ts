@@ -104,8 +104,6 @@ export class BatchedEffect implements IEffect {
   private _cleanup: Function | undefined;
   private _isDisposed: boolean;
   private _sigsHead: EffectNode | undefined;
-  private _isPending: boolean;
-  private _createdInCurrentBatch: boolean;
 
   // TODO: Add _isPending property (type: boolean) to track if queued for execution
 
@@ -113,9 +111,7 @@ export class BatchedEffect implements IEffect {
     // TODO: Initialize all properties
     this._fn = fn;
     this._isDisposed = false;
-    this._isPending = false;
     // Mark if created during a batch - such effects shouldn't run in that same batch's flush
-    this._createdInCurrentBatch = batchDepth > 0;
     // TODO: Call _run() to execute immediately (first run is not batched)
     this._run();
   }
@@ -139,7 +135,6 @@ export class BatchedEffect implements IEffect {
     // TODO: Check if disposed, return early if true
     if (this._isDisposed) return;
     // TODO: Set _isPending = false (we're executing now)
-    this._isPending = false;
     // TODO: Call cleanup function if exists
     if (typeof this._cleanup === "function") {
       this._cleanup();
@@ -164,14 +159,7 @@ export class BatchedEffect implements IEffect {
     // TODO: Check if disposed, return early
     if (this._isDisposed) return;
     // TODO: Check if currently batching (batchDepth > 0)
-    if (batchDepth > 0) {
-      this._isPending = true;
-      //   If batching:
-      //     - Set _isPending = true
-      //     - Add this effect to pendingEffects Set
-      pendingEffects.add(this);
-      //     - DO NOT call _run() yet
-    } else {
+    if (batchDepth === 0) {
       //   If NOT batching:
       //     - Call _run() immediately
       this._run();
@@ -222,7 +210,6 @@ export class BatchedComputedSignal<T>
   private _isDisposed = false;
   private _sigsHead: EffectNode | undefined = undefined;
   // TODO: Add _isPending property for batch tracking
-  private _isPending = false;
 
   constructor(computeFn: () => T) {
     super(undefined as any);
@@ -339,7 +326,7 @@ export class BatchedComputedSignal<T>
       // Eagerly recompute to see if value changed
       // Pass shouldNotify=true since we're being invalidated (pushed), not accessed (pulled)
       try {
-        const newValue = this._recompute(true);
+        this._recompute(true);
         // _recompute(true) will notify if value changed
       } catch (error) {
         // On error, always notify dependents
@@ -418,18 +405,7 @@ function flushPendingEffects(): void {
     // Must call _run() directly to avoid re-queuing in pendingEffects
     // Check _isDisposed to skip disposed effects
     // Check _createdInCurrentBatch to skip effects created during this batch
-    arr.forEach((e) => {
-      if (e instanceof BatchedEffect) {
-        const effect = e as any;
-        if (!effect._isDisposed) {
-          effect._run();
-        }
-      } else if (e instanceof BatchedComputedSignal) {
-        // Computed signals get recomputed when accessed, not during flush
-        // They were invalidated during the batch and will recompute lazily
-        // Do nothing here
-      }
-    });
+    arr.forEach((e) => e.onDependencyChange());
   } finally {
     isFlushing = false;
   }
