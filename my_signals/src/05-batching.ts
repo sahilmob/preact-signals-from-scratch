@@ -44,6 +44,8 @@ import { ComputedState } from "./03-computed.ts";
 let batchDepth = 0;
 // TODO: Add pendingEffects variable (type: Set<IEffect>, initial: new Set())
 const pendingEffects: Set<IEffect> = new Set();
+// Track if we're currently flushing effects to prevent re-entrancy issues
+let isFlushing = false;
 
 /**
  * BatchedSignal - Signal that defers notifications during batches
@@ -71,17 +73,23 @@ export class BatchedSignal<T = any> extends LinkedReactiveSignal<T> {
   protected _notifyDependentEffects(): void {
     // TODO: Check if currently batching (batchDepth > 0)
     //   If batching:
-    if (batchDepth > 0) {
+    if (batchDepth > 0 && !isFlushing) {
       //     - Traverse _depsHead linked list
       let current = this._depsHead;
       while (current) {
-        //     - Add each effect to pendingEffects Set
-        pendingEffects.add(current.effect);
+        // Computed signals must be invalidated immediately, not batched
+        // Only regular effects get batched
+        if (current.effect instanceof BatchedComputedSignal) {
+          current.effect.onDependencyChange();
+        } else {
+          //     - Add non-computed effects to pendingEffects Set
+          pendingEffects.add(current.effect);
+        }
         current = current.nextDep;
-        //     - DO NOT call effect.onDependencyChange() yet
+        //     - DO NOT call regular effect.onDependencyChange() yet
       }
     } else {
-      //   If NOT batching:
+      //   If NOT batching OR we're flushing:
       //     - Call parent implementation (immediate notification)
       super._notifyDependentEffects();
     }
@@ -97,6 +105,7 @@ export class BatchedEffect implements IEffect {
   private _isDisposed: boolean;
   private _sigsHead: EffectNode | undefined;
   private _isPending: boolean;
+  private _createdInCurrentBatch: boolean;
 
   // TODO: Add _isPending property (type: boolean) to track if queued for execution
 
@@ -105,6 +114,8 @@ export class BatchedEffect implements IEffect {
     this._fn = fn;
     this._isDisposed = false;
     this._isPending = false;
+    // Mark if created during a batch - such effects shouldn't run in that same batch's flush
+    this._createdInCurrentBatch = batchDepth > 0;
     // TODO: Call _run() to execute immediately (first run is not batched)
     this._run();
   }
@@ -234,7 +245,6 @@ export class BatchedComputedSignal<T>
   }
 
   get value() {
-    console.log("acccessed");
     // TODO: Implement like LinkedComputedSignal
     // TODO: Handle COMPUTING state (circular dependency)
     if (this._state === ComputedState.COMPUTING) {
@@ -254,7 +264,8 @@ export class BatchedComputedSignal<T>
       return this._value;
     }
     // TODO: Recompute if STALE
-    return this._recompute();
+    // When accessed via .value getter, don't notify (we're being pulled)
+    return this._recompute(false);
   }
 
   set value(_: any) {
@@ -262,7 +273,7 @@ export class BatchedComputedSignal<T>
     throw new Error("Computed signals are read-only");
   }
 
-  private _recompute() {
+  private _recompute(shouldNotify: boolean = true) {
     // TODO: Implement like LinkedComputedSignal
     // TODO: Set state to COMPUTING
     this._state = ComputedState.COMPUTING;
@@ -283,8 +294,10 @@ export class BatchedComputedSignal<T>
       }
       this._state = ComputedState.FRESH;
       // TODO: Notify dependents (respects batching)
-      // Only notify if value actually changed and not inside an evalContext
-      if (valueChanged && !evalContext) {
+      // Only notify if:
+      // - value actually changed
+      // - shouldNotify is true (we're being invalidated, not accessed)
+      if (valueChanged && shouldNotify) {
         this._notifyDependentEffects();
       }
       return this._value;
@@ -302,21 +315,36 @@ export class BatchedComputedSignal<T>
   onDependencyChange(): void {
     // TODO: Check if disposed
     if (this._isDisposed) return;
-    // TODO: Check if currently batching
-    //     - Set state to STALE
-    this._state = ComputedState.STALE;
-    if (batchDepth > 0) {
-      //   If batching:
-      //     - Set _isPending = true
-      this._isPending = true;
-      //     - Add to pendingEffects
-      pendingEffects.add(this);
-      //     - DO NOT notify dependents yet
-    } else {
-      //   If NOT batching:
-      //     - Set state to STALE
-      //     - Notify dependents immediately
-      this._notifyDependentEffects();
+
+    // If we have no dependents, stay lazy - just invalidate
+    if (!this._depsHead) {
+      if (
+        this._state === ComputedState.FRESH ||
+        this._state === ComputedState.ERROR
+      ) {
+        this._state = ComputedState.STALE;
+      }
+      return;
+    }
+
+    // If we DO have dependents, eagerly recompute to check if value changed
+    // Only notify dependents if the value actually changes
+    if (
+      this._state === ComputedState.FRESH ||
+      this._state === ComputedState.ERROR
+    ) {
+      const oldValue = this._value;
+      this._state = ComputedState.STALE;
+
+      // Eagerly recompute to see if value changed
+      // Pass shouldNotify=true since we're being invalidated (pushed), not accessed (pulled)
+      try {
+        const newValue = this._recompute(true);
+        // _recompute(true) will notify if value changed
+      } catch (error) {
+        // On error, always notify dependents
+        this._notifyDependentEffects();
+      }
     }
   }
 
@@ -381,8 +409,32 @@ function flushPendingEffects(): void {
   const arr = Array.from(pendingEffects);
   // TODO: Clear pendingEffects Set
   pendingEffects.clear();
-  // TODO: Iterate through array and call each effect's onDependencyChange()
-  arr.forEach((e) => e.onDependencyChange());
+
+  // Set flushing flag to prevent effects created during flush from being re-flushed
+  isFlushing = true;
+
+  try {
+    // TODO: Run each pending effect
+    // Must call _run() directly to avoid re-queuing in pendingEffects
+    // Check _isDisposed to skip disposed effects
+    // Check _createdInCurrentBatch to skip effects created during this batch
+    arr.forEach((e) => {
+      if (e instanceof BatchedEffect) {
+        if (!e['_isDisposed'] && !e['_createdInCurrentBatch']) {
+          e['_run']();
+        }
+        // Clear the flag so effect can run in future batches
+        e['_createdInCurrentBatch'] = false;
+      } else if (e instanceof BatchedComputedSignal) {
+        // Computed signals get recomputed when accessed, not during flush
+        // They were invalidated during the batch and will recompute lazily
+        // Do nothing here
+      }
+    });
+  } finally {
+    isFlushing = false;
+  }
+
   // TODO: Note: Effects may add new effects to pendingEffects during execution
   //       This is okay - those will be flushed in the next batch
 }
