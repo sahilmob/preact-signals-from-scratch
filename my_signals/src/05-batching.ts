@@ -266,8 +266,10 @@ export class BatchedComputedSignal<T>
     // TODO: Implement like LinkedComputedSignal
     // TODO: Set state to COMPUTING
     this._state = ComputedState.COMPUTING;
+    this._error = undefined;
     // TODO: Set up evaluation context
     const prevContext = getContext();
+    setContext(this);
     // TODO: Clear dependencies
     this._clearDependencies();
     // TODO: Execute compute function
@@ -281,7 +283,8 @@ export class BatchedComputedSignal<T>
       }
       this._state = ComputedState.FRESH;
       // TODO: Notify dependents (respects batching)
-      if (valueChanged) {
+      // Only notify if value actually changed and not inside an evalContext
+      if (valueChanged && !evalContext) {
         this._notifyDependentEffects();
       }
       return this._value;
@@ -289,6 +292,7 @@ export class BatchedComputedSignal<T>
       // TODO: Handle errors by setting ERROR state
       this._state = ComputedState.ERROR;
       this._error = error;
+      throw error;
     } finally {
       // TODO: Restore context
       setContext(prevContext);
