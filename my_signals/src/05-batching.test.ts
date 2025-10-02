@@ -4,7 +4,7 @@
  * Comprehensive test suite for batching functionality
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   BatchedSignal,
   BatchedEffect,
@@ -504,28 +504,26 @@ describe("Phase 5: Batching", () => {
     it("should handle effects created during batch", () => {
       const sig1 = batchedSignal(1);
       const sig2 = batchedSignal(2);
-      let effect1Count = 0;
-      let effect2Count = 0;
-
-      batchedEffect(() => {
+      let effect1 = vi.fn().mockImplementation(() => {
         sig1.value;
-        effect1Count++;
       });
+      let effect2 = vi.fn().mockImplementation(() => {
+        sig2.value;
+      });
+
+      batchedEffect(effect1);
 
       batch(() => {
         sig1.value = 10;
 
         // Create new effect during batch
-        batchedEffect(() => {
-          sig2.value;
-          effect2Count++;
-        });
+        batchedEffect(effect2);
 
         sig2.value = 20;
       });
 
-      expect(effect1Count).toBe(2); // Initial + batch
-      expect(effect2Count).toBe(1); // Only initial (created during batch)
+      expect(effect1).toHaveBeenCalledTimes(2); // Initial + batch
+      expect(effect2).toHaveBeenCalledOnce(); // Only initial (created during batch)
     });
 
     it("should handle signals created during batch", () => {
@@ -546,7 +544,7 @@ describe("Phase 5: Batching", () => {
       });
 
       expect(result).toBe(20);
-      expect(effectCount).toBe(2); // Initial + one batched update
+      expect(effectCount).toBe(1); // Initial + one batched update
     });
   });
 

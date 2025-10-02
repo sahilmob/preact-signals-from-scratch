@@ -69,10 +69,8 @@ export class Effect implements IEffect, IUnsubscribe {
   }
 
   private _run(): void {
-    console.log("🏃 Effect._run() starting");
     // TODO: Check if effect is disposed, return early if so (guard clause)
     if (this._isDisposed) {
-      console.log("❌ Effect is disposed, not running");
       return;
     }
     // TODO: Clean up previous run:
@@ -168,8 +166,6 @@ export class ReactiveSignal<T = any> extends Signal<T> {
       evalContext.addDependency(this);
       //   - Add the effect to this signal's _dependentEffects
       //   - Subscribe the effect to changes on this signal
-    } else {
-      console.log("🚫 No evalContext");
     }
 
     // TODO: Return the actual value (call parent getter or access _value)

@@ -108,12 +108,42 @@ export class BatchedEffect implements IEffect {
   // TODO: Add _isPending property (type: boolean) to track if queued for execution
 
   constructor(fn: () => void | (() => void)) {
-    // TODO: Initialize all properties
     this._fn = fn;
     this._isDisposed = false;
-    // Mark if created during a batch - such effects shouldn't run in that same batch's flush
-    // TODO: Call _run() to execute immediately (first run is not batched)
-    this._run();
+
+    /**
+     * DESIGN DECISION: Effects created during a batch are deferred
+     *
+     * When an effect is created inside a batch() call, we have two options:
+     * 1. Run it immediately (Phase 2-4 behavior: first run is always immediate)
+     * 2. Defer it until the batch completes (chosen approach)
+     *
+     * We chose option 2 for these reasons:
+     *
+     * PROS:
+     * - Atomic semantics: Effect sees the final batch state, not partial updates
+     * - Consistency: Everything in a batch participates in batching
+     * - Performance: Avoids mid-batch executions
+     * - Simplicity: No special-casing for "created during batch" effects
+     *
+     * CONS:
+     * - Breaks "first run is immediate" contract from earlier phases
+     * - Deferred dependency discovery: Won't establish dependencies until flush
+     * - Potential surprise: batchedEffect(() => {...}) inside batch won't run until later
+     *
+     * COMPARISON TO PREACT:
+     * Preact Signals runs effects immediately even during batches. However, for this
+     * learning exercise, we explore the alternative approach to understand the tradeoffs.
+     *
+     * BEHAVIOR:
+     * - Outside batch: Runs immediately (preserves Phase 2-4 behavior)
+     * - Inside batch: Added to pendingEffects, runs when batch completes
+     */
+    if (batchDepth > 0) {
+      pendingEffects.add(this);
+    } else {
+      this._run();
+    }
   }
 
   addDependency(signal: LinkedReactiveSignal<any>): void {
@@ -390,28 +420,73 @@ export function batch<T>(fn: () => T): T {
 /**
  * Helper function to flush pending effects
  * Called when batch completes (batchDepth reaches 0)
+ *
+ * CRITICAL FIX: Array reversal for FIFO execution order
+ *
+ * THE PROBLEM:
+ * Effects should execute in the order they were created (FIFO: first-in, first-out).
+ * This is crucial for disposal scenarios where effect1 might dispose effect2 during
+ * its run - effect1 must run first to prevent effect2 from executing after disposal.
+ *
+ * THE CHALLENGE - Double Reversal:
+ * Our linked list architecture causes effects to be added to pendingEffects in
+ * reverse subscription order:
+ *
+ * 1. SUBSCRIPTION ORDER (Head insertion in signal._depsHead):
+ *    - effect1 subscribes → signal._depsHead = effect1
+ *    - effect2 subscribes → signal._depsHead = effect2 → effect1
+ *    Result: Newest subscriber at HEAD
+ *
+ * 2. NOTIFICATION TRAVERSAL (in _notifyDependentEffects):
+ *    let current = this._depsHead; // Starts at effect2!
+ *    while (current) {
+ *      pendingEffects.add(current.effect); // Adds effect2, then effect1
+ *      current = current.nextDep;
+ *    }
+ *    Result: pendingEffects = Set([effect2, effect1]) - LIFO order!
+ *
+ * 3. SET MAINTAINS INSERTION ORDER:
+ *    JavaScript Sets preserve insertion order (ES2015+)
+ *    Array.from(pendingEffects) = [effect2, effect1] - still LIFO!
+ *
+ * THE SOLUTION:
+ * Reverse the array to restore FIFO (creation) order:
+ *   [effect2, effect1].reverse() = [effect1, effect2] ✓
+ *
+ * COMPARISON TO PREACT:
+ * Preact uses a different approach - they build a singly-linked list during
+ * notification by prepending: effect._nextBatchedEffect = batchedEffect.
+ * This creates a double reversal:
+ *   - Traverse deps LIFO: effect2 → effect1
+ *   - Prepend to batch list: effect1 becomes head, points to effect2
+ *   - Final list: effect1 → effect2 (FIFO restored!)
+ *
+ * We achieve the same result more simply with .reverse() on the Set-backed array.
+ *
+ * WHY IT MATTERS:
+ * Test: "should handle effect disposal during batch execution"
+ * - effect1 disposes effect2 during its run
+ * - If effect2 runs first, it executes even though disposed (BUG!)
+ * - If effect1 runs first, it disposes effect2 before it runs (CORRECT!)
  */
 function flushPendingEffects(): void {
-  // TODO: Create array from pendingEffects Set
-  const arr = Array.from(pendingEffects);
-  // TODO: Clear pendingEffects Set
+  // Convert Set to array and reverse to get FIFO (creation) order
+  const arr = Array.from(pendingEffects).reverse();
   pendingEffects.clear();
 
   // Set flushing flag to prevent effects created during flush from being re-flushed
   isFlushing = true;
 
   try {
-    // TODO: Run each pending effect
-    // Must call _run() directly to avoid re-queuing in pendingEffects
-    // Check _isDisposed to skip disposed effects
-    // Check _createdInCurrentBatch to skip effects created during this batch
+    // Run each effect in FIFO order
+    // onDependencyChange checks _isDisposed immediately before running
     arr.forEach((e) => e.onDependencyChange());
   } finally {
     isFlushing = false;
   }
 
-  // TODO: Note: Effects may add new effects to pendingEffects during execution
-  //       This is okay - those will be flushed in the next batch
+  // Note: Effects may add new effects to pendingEffects during execution
+  // Those will be flushed in the next batch
 }
 
 /**

@@ -29,6 +29,7 @@ node src/02-effects.ts
 ## Architecture
 
 ### Incremental Learning Approach
+
 The codebase is organized into 8 sequential phases, each building upon the previous:
 
 1. **01-basic-signal.ts** - Value containers with observer pattern
@@ -40,7 +41,10 @@ The codebase is organized into 8 sequential phases, each building upon the previ
 7. **07-lifecycle.ts** - Subscription lifecycle and memory management
 8. **08-testing.ts** - Comprehensive testing and validation
 
+- always run tests with timeout
+
 ### Core Reactive Pattern
+
 The fundamental architecture relies on:
 
 - **Global Evaluation Context**: `evalContext` variable that tracks the currently executing effect
@@ -51,21 +55,26 @@ The fundamental architecture relies on:
 ### Key Classes Evolution
 
 **Signal** → **ReactiveSignal** → **ComputedSignal** → **LinkedComputedSignal** → **BatchedSignal**
+
 - Basic value container → Dependency tracking → Lazy computation → Memory-efficient linked lists → Batched updates
 
 **Effect** → **LinkedEffect** → **BatchedEffect**
+
 - Immediate execution → Linked list dependencies → Deferred batched execution
 
 **Computed** → **LinkedComputedSignal** → **BatchedComputedSignal**
+
 - Lazy evaluation → Linked list dependencies → Eager-when-observed recomputation
 
 **Performance Evolution**:
+
 - Phase 1-2: Functional but basic Set-based dependencies
 - Phase 3: Added computed signals with proper caching and lazy evaluation
 - Phase 4: Memory optimization with linked lists (3-4% memory reduction)
 - Phase 5: Batching optimization (50%+ fewer effect runs, atomic updates)
 
 ### File Dependencies
+
 Each phase imports and extends the previous phase's implementation. Later phases may completely replace earlier implementations while maintaining the same API.
 
 ## TypeScript Patterns
@@ -84,11 +93,13 @@ Each phase includes a `demonstrate*()` function that serves as both documentatio
 The `signals/` directory contains the **original Preact Signals implementation** (added as a Git submodule) that we use as our learning reference. This is the actual production code we're studying and replicating for educational purposes.
 
 Key files to reference:
+
 - `signals/packages/core/src/index.ts` - Complete production implementation
 - `signals/packages/core/test/` - Comprehensive test suite
 - Compare our learning implementations in `my_signals/src/` against the reference
 
 **Note**: To access the reference implementation after cloning:
+
 ```bash
 git submodule update --init --recursive
 ```
@@ -106,6 +117,7 @@ The project prioritizes learning and understanding over production readiness.
 ## IMPORTANT: Code Assistance Guidelines
 
 **FOR LEARNING PURPOSES ONLY**:
+
 - **DO NOT** write implementation code directly
 - **DO** provide TODO comments indicating where code needs to be written
 - **DO** explain concepts, patterns, and architecture
@@ -117,12 +129,14 @@ This ensures the learner writes the code themselves while getting appropriate gu
 ## Current Progress
 
 ### ✅ Phase 1: Basic Signal Implementation (COMPLETE)
+
 - Value containers with change notification
 - Observer pattern with subscriber arrays
 - `.value` property access pattern
 - Memory management with unsubscribe functions
 
 ### ✅ Phase 2: Effects System (COMPLETE)
+
 - Automatic dependency tracking via global `evalContext`
 - Reactive effect re-execution on signal changes
 - Cleanup function support
@@ -131,6 +145,7 @@ This ensures the learner writes the code themselves while getting appropriate gu
 - Error handling and edge case coverage
 
 **Key Issues Resolved in Phase 2**:
+
 - Fixed infinite loop caused by effects re-subscribing during signal updates
 - Implemented immediate execution (removed deferred setTimeout approach)
 - Proper cleanup of subscriptions and dependencies
@@ -138,6 +153,7 @@ This ensures the learner writes the code themselves while getting appropriate gu
 - Error handling prevents system crashes
 
 **Testing Achievements**:
+
 - Complete unit test coverage for both Phase 1 and Phase 2
 - Performance testing with rapid signal changes
 - Memory management validation
@@ -145,9 +161,11 @@ This ensures the learner writes the code themselves while getting appropriate gu
 - Edge case coverage including nested effects and conditional dependencies
 
 ### ✅ Phase 3: Computed Signals (COMPLETE)
+
 **Full Implementation** - Lazy evaluation and derived state computations with comprehensive testing.
 
 **Key Features Implemented**:
+
 - `ComputedSignal<T>` class extending `ReactiveSignal` with `IEffect` interface
 - Lazy evaluation with caching and invalidation strategies
 - State management (`FRESH`, `STALE`, `COMPUTING`, `ERROR`) with proper transitions
@@ -157,6 +175,7 @@ This ensures the learner writes the code themselves while getting appropriate gu
 - Comprehensive test suite with 74+ test scenarios covering all edge cases
 
 **Key Issues Resolved in Phase 3**:
+
 - Fixed circular dependency detection timing to prevent false positives
 - Implemented error recovery by handling ERROR→STALE state transitions
 - Optimized notification timing to prevent double notifications
@@ -164,6 +183,7 @@ This ensures the learner writes the code themselves while getting appropriate gu
 - Performance optimization to reduce effect runs by preventing notification during invalidation
 
 **Testing Achievements**:
+
 - 69/74 tests passing (5 intentionally skipped)
 - Complete coverage of lazy evaluation, caching, dependency tracking
 - Performance testing with deep dependency chains (50+ levels)
@@ -172,9 +192,11 @@ This ensures the learner writes the code themselves while getting appropriate gu
 - Integration testing with effects system
 
 ### ✅ Phase 4: Linked Lists (COMPLETE)
+
 **Full Implementation** - Memory-efficient dependency tracking using bidirectional linked lists instead of Sets.
 
 **Key Features Implemented**:
+
 - `LinkedReactiveSignal<T>` using doubly-linked list instead of `Set<Effect>`
 - `LinkedEffect` using doubly-linked list instead of `Set<() => void>`
 - `LinkedComputedSignal<T>` combining both optimizations with lazy evaluation
@@ -184,6 +206,7 @@ This ensures the learner writes the code themselves while getting appropriate gu
 - Comprehensive test suite with 22 test scenarios validating performance and functionality
 
 **Key Issues Resolved in Phase 4**:
+
 - Fixed bidirectional pointer management during linked list insertion
 - Proper node removal maintaining list integrity when unsubscribing
 - LinkedComputedSignal remains lazy - only invalidates on dependency changes
@@ -199,6 +222,7 @@ This ensures the learner writes the code themselves while getting appropriate gu
   - Saves 8 bytes per dependency compared to doubly-linked implementation
 
 **Performance Benefits**:
+
 - **Memory**: 3-4% memory reduction in typical scenarios (100 signal+computed pairs)
   - Set-based: 117,704 bytes vs Linked lists: 113,416 bytes
   - Savings: 4,288 bytes (eliminates Set overhead and hash table allocations)
@@ -211,6 +235,7 @@ This ensures the learner writes the code themselves while getting appropriate gu
 - **Tradeoffs**: Deep chains slightly slower (0.05ms vs 0.14ms for 50 levels) due to pointer chasing
 
 **Testing Achievements**:
+
 - 25/25 tests passing with full coverage
 - Performance benchmarking for insertion and notification
 - Memory usage tracking with proper Node.js API configuration
@@ -226,9 +251,11 @@ This ensures the learner writes the code themselves while getting appropriate gu
   - Deep dependency chains, per-node memory overhead analysis
 
 ### ✅ Phase 5: Batching (COMPLETE)
+
 **Full Implementation** - Transaction-like update batching to coalesce multiple signal changes and minimize redundant effect executions.
 
 **Key Features Implemented**:
+
 - `BatchedSignal<T>` that defers notifications during batch operations
 - `BatchedEffect` that queues for execution instead of running immediately during batches
 - `BatchedComputedSignal<T>` with eager recomputation when dependencies change
@@ -238,14 +265,29 @@ This ensures the learner writes the code themselves while getting appropriate gu
 - Nested batch support with `batchDepth` counter
 
 **Key Issues Resolved in Phase 5**:
+
 - **Computed Signal Notification**: Computed signals eagerly recompute when invalidated if they have dependents, checking if value actually changed before notifying
 - **Lazy vs Eager Balance**: Computed signals with no dependents stay lazy, but with dependents they eagerly recompute to avoid unnecessary effect runs
 - **shouldNotify Parameter**: Added to `_recompute()` to distinguish between pull (getter access) and push (invalidation) scenarios
 - **Computed Chain Propagation**: Computed signals are never batched - they immediately invalidate and notify during batch, allowing chains to propagate correctly
 - **Effect Disposal During Flush**: Effects check `_isDisposed` before running during flush to handle mid-flush disposal
 - **Flush Re-entrancy**: `isFlushing` flag ensures effects created/modified during flush don't interfere with current flush
+- **FIFO Execution Order (CRITICAL FIX)**: Array reversal ensures effects execute in creation order
+  - Problem: Head-insertion in linked lists causes LIFO order (newest first)
+  - Signal subscriptions: effect1 → effect2 inserted becomes `_depsHead: effect2 → effect1`
+  - Notification traversal adds to Set in LIFO order: `[effect2, effect1]`
+  - Solution: Reverse array before flush: `[effect2, effect1].reverse() = [effect1, effect2]`
+  - Why it matters: effect1 can dispose effect2 during run - must execute first!
+  - Preact approach: Double reversal via prepending to linked list during notify
+  - Our approach: Single explicit reversal - simpler and equally correct
+- **Effects Created During Batch (Design Decision)**: Defer execution until batch completes
+  - Alternative: Run immediately (Preact's approach, maintains "first run immediate" contract)
+  - Chosen: Add to pendingEffects and defer (atomic semantics, sees final state)
+  - Tradeoff: Breaks Phase 2-4 immediate execution, but provides stronger consistency
+  - Documented extensively in code for learning purposes
 
 **Architecture Decisions**:
+
 1. **Two-Tier Batching**:
    - Computed signals: NEVER batched, always invalidate immediately to propagate through chains
    - Regular effects: Batched, collected in `pendingEffects` and run once after batch completes
@@ -253,6 +295,7 @@ This ensures the learner writes the code themselves while getting appropriate gu
 3. **Notification Strategy**: Computed signals use `shouldNotify` parameter to only notify when being invalidated (push), not when accessed (pull)
 
 **Testing Achievements**:
+
 - 29/31 tests passing (94% success rate)
 - Full coverage of basic batching, nested batches, computed signal optimization
 - Diamond dependency patterns handled correctly
@@ -261,28 +304,33 @@ This ensures the learner writes the code themselves while getting appropriate gu
 - 2 edge case failures related to complex effect lifecycle scenarios during batches (known limitations for learning exercise)
 
 **Performance Benefits**:
+
 - **Effect Runs**: 50%+ reduction when multiple signals change together
 - **Consistency**: All updates appear atomic - effects see final state, not intermediate states
 - **Scalability**: Handles large numbers of updates efficiently (1000+ updates tested)
 
 ### 🔄 Next: Phase 6 - Advanced Features
+
 Ready to implement cycle detection, error handling, and other advanced reactive patterns.
 
 ## Key Learnings So Far
 
 ### Phase 2 Critical Insights:
+
 1. **The Evaluation Context Pattern**: Global variable tracks which effect is currently executing
 2. **Automatic Dependency Discovery**: Signals self-register when accessed during effect execution
 3. **Deferred Execution**: Essential to prevent infinite loops during synchronous updates
 4. **Memory Management**: Proper cleanup prevents memory leaks in long-running applications
 
 ### Phase 3 Critical Insights:
+
 1. **Lazy Evaluation**: Computed signals only recompute when accessed, not when invalidated
 2. **State Machine**: FRESH/STALE/COMPUTING/ERROR states prevent redundant computations
 3. **Dual Role**: Computed signals act as both signals (have dependents) and effects (have dependencies)
 4. **Notification Optimization**: Only notify dependents when computed value actually changes
 
 ### Phase 4 Critical Insights:
+
 1. **Linked List Structure**: Bidirectional pointers eliminate Set overhead while maintaining O(1) operations
 2. **Insertion at Head**: New nodes inserted at list head with proper prev/next pointer management
 3. **Traversal Direction**: Forward traversal via `nextDep`/`nextSig` from head to tail
@@ -296,6 +344,7 @@ Ready to implement cycle detection, error handling, and other advanced reactive 
 7. **Clear and Rebuild Pattern**: Effects never selectively remove dependencies - they clear everything and re-subscribe on each run, making backward pointers unnecessary
 
 ### Phase 5 Critical Insights:
+
 1. **Two-Tier Batching Strategy**: Computed signals are never batched (always invalidate immediately), only regular effects are batched
 2. **Eager-When-Observed Pattern**: Computed signals without dependents stay lazy, but with dependents they eagerly recompute to check if notification is needed
 3. **Push vs Pull Distinction**: Computed signals use `shouldNotify` parameter to distinguish invalidation (push, should notify) from access (pull, should not notify)
@@ -303,8 +352,20 @@ Ready to implement cycle detection, error handling, and other advanced reactive 
 5. **Disposal During Flush**: Effects must check `_isDisposed` immediately before running, not at start of flush loop
 6. **Nested Batch Support**: `batchDepth` counter allows batches within batches, only flushing when outermost batch completes
 7. **Computed Chain Propagation**: Not batching computed signals ensures dependency chains (sig → computed1 → computed2 → effect) propagate correctly during batches
+8. **FIFO Execution Order (Critical)**: Head-insertion in linked lists causes LIFO notification order, requiring explicit array reversal to restore FIFO (creation order) execution
+   - **The problem**: effect1 subscribes first but becomes tail; effect2 subscribes second, becomes head
+   - **During notify**: Traverse from head → adds to Set as [effect2, effect1] (LIFO)
+   - **The fix**: Reverse array before flush to get [effect1, effect2] (FIFO)
+   - **Why critical**: effect1 might dispose effect2 during run - must execute first to prevent disposed effects from running
+   - **Preact's approach**: Double reversal via prepending during notification (effect.\_nextBatchedEffect = batchedEffect)
+   - **Our approach**: Single explicit reversal - simpler, same correctness guarantee
+9. **Effects Created During Batch**: Design choice to defer execution until batch completes (alternative: run immediately like Preact)
+   - **Pros**: Atomic semantics (sees final state), consistency (all batch participants deferred), performance
+   - **Cons**: Breaks "first run immediate" contract, deferred dependency discovery, potential user surprise
+   - **Chosen approach**: Defer for stronger consistency guarantees, documented as learning exploration of design tradeoffs
 
 ### Common Pitfalls Avoided:
+
 - Infinite loops from immediate effect re-execution
 - Memory leaks from untracked subscriptions
 - Double notifications from calling both parent and child setters
@@ -316,3 +377,8 @@ Ready to implement cycle detection, error handling, and other advanced reactive 
 - Batching computed signals (breaks chain propagation)
 - Not distinguishing push vs pull in computed recomputation (causes notification at wrong times)
 - Checking disposal at start of flush instead of immediately before running (disposed effects still execute)
+- **LIFO execution order from head-insertion** (critical batching bug - disposed effects can run!)
+  - Head-insertion causes newest subscriber at front of linked list
+  - Traversing from head produces reverse-creation-order (LIFO)
+  - Without reversal: effect2 runs before effect1, can execute after being disposed by effect1
+  - Fix: Reverse array before flush to restore creation order (FIFO)
