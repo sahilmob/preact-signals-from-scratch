@@ -15,7 +15,7 @@ import {
   batch,
 } from "./05-batching.ts";
 
-describe.skip("Phase 5: Batching", () => {
+describe("Phase 5: Batching", () => {
   describe("BatchedSignal", () => {
     it("should update value immediately when not batching", () => {
       const sig = batchedSignal(0);

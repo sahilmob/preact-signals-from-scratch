@@ -265,7 +265,6 @@ export class LinkedComputedSignal<T>
   private _state: ComputedState;
   private _error: any;
   private _isComputed = true;
-  private _cleanup: Function | undefined;
   // TODO: Add linked list properties for tracking dependencies as an effect
   private _isDisposed = false;
   private _sigsHead: EffectNode | undefined = undefined;
@@ -397,12 +396,10 @@ export class LinkedComputedSignal<T>
     // TODO: Set _isDisposed = true
     this._isDisposed = true;
     // TODO: Call cleanup function
-    this?._cleanup?.();
     // TODO: Traverse _sigsHead and unsubscribe from all signals
     // TODO: Clear _sigsHead
     this._clearDependencies();
     // TODO: Clear _fn and _cleanup
-    this._cleanup = undefined;
   }
 
   // TODO: Implement all methods from ComputedSignal
