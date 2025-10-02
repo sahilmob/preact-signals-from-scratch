@@ -264,6 +264,131 @@ describe("Phase 4: Linked Lists - Memory-Efficient Dependency Tracking", () => {
       source.value = 8;
       expect(errorComputed.value).toBe(16);
     });
+
+    it("should properly clear ALL dependencies when recomputing (multiple dependencies)", () => {
+      // Create a computed that depends on THREE signals
+      const sig1 = linkedReactiveSignal(1);
+      const sig2 = linkedReactiveSignal(2);
+      const sig3 = linkedReactiveSignal(3);
+
+      let callCount = 0;
+      const multiDepComputed = linkedComputed(() => {
+        callCount++;
+        return sig1.value + sig2.value + sig3.value;
+      });
+
+      // Initial access - should compute
+      expect(multiDepComputed.value).toBe(6); // 1 + 2 + 3
+      expect(callCount).toBe(1);
+
+      // Change sig1 - should recompute and clear ALL old subscriptions
+      sig1.value = 10;
+      expect(multiDepComputed.value).toBe(15); // 10 + 2 + 3
+      expect(callCount).toBe(2);
+
+      // Verify all three signals are still properly connected
+      // by changing each one and confirming recomputation
+      sig2.value = 20;
+      expect(multiDepComputed.value).toBe(33); // 10 + 20 + 3
+      expect(callCount).toBe(3);
+
+      sig3.value = 30;
+      expect(multiDepComputed.value).toBe(60); // 10 + 20 + 30
+      expect(callCount).toBe(4);
+
+      // Verify the linked list structure has all 3 dependencies
+      const sigsHead = (multiDepComputed as any)._sigsHead;
+      expect(sigsHead).toBeDefined();
+
+      // Count nodes in the linked list (should be 3)
+      let count = 0;
+      let current = sigsHead;
+      while (current) {
+        count++;
+        current = current.nextSig;
+      }
+      expect(count).toBe(3);
+    });
+
+    it("should properly unsubscribe from ALL signals during dispose (multiple dependencies)", () => {
+      const sig1 = linkedReactiveSignal(1);
+      const sig2 = linkedReactiveSignal(2);
+      const sig3 = linkedReactiveSignal(3);
+
+      const multiDepComputed = linkedComputed(() => {
+        return sig1.value + sig2.value + sig3.value;
+      });
+
+      // Access to set up dependencies
+      expect(multiDepComputed.value).toBe(6);
+
+      // Track how many dependents each signal has
+      const countDependents = (sig: any) => {
+        let count = 0;
+        let current = sig._depsHead;
+        while (current) {
+          count++;
+          current = current.nextDep;
+        }
+        return count;
+      };
+
+      // Each signal should have 1 dependent (the computed)
+      expect(countDependents(sig1)).toBe(1);
+      expect(countDependents(sig2)).toBe(1);
+      expect(countDependents(sig3)).toBe(1);
+
+      // Dispose the computed
+      multiDepComputed.dispose();
+
+      // All signals should have 0 dependents now
+      expect(countDependents(sig1)).toBe(0);
+      expect(countDependents(sig2)).toBe(0);
+      expect(countDependents(sig3)).toBe(0);
+
+      // Verify _sigsHead is cleared
+      expect((multiDepComputed as any)._sigsHead).toBeUndefined();
+    });
+
+    it("should handle dynamic dependencies (conditional dependencies change)", () => {
+      const condition = linkedReactiveSignal(true);
+      const sig1 = linkedReactiveSignal(10);
+      const sig2 = linkedReactiveSignal(20);
+
+      let computeCount = 0;
+      const conditionalComputed = linkedComputed(() => {
+        computeCount++;
+        // Dependencies change based on condition
+        return condition.value ? sig1.value : sig2.value;
+      });
+
+      // Initially depends on sig1
+      expect(conditionalComputed.value).toBe(10);
+      expect(computeCount).toBe(1);
+
+      // Changing sig1 should trigger recompute
+      sig1.value = 15;
+      expect(conditionalComputed.value).toBe(15);
+      expect(computeCount).toBe(2);
+
+      // Changing sig2 should NOT trigger recompute (not a dependency)
+      sig2.value = 25;
+      expect(computeCount).toBe(2); // Still 2, no recompute
+
+      // Switch condition - now depends on sig2 instead of sig1
+      condition.value = false;
+      expect(conditionalComputed.value).toBe(25);
+      expect(computeCount).toBe(3);
+
+      // Now sig2 changes should trigger recompute
+      sig2.value = 30;
+      expect(conditionalComputed.value).toBe(30);
+      expect(computeCount).toBe(4);
+
+      // And sig1 changes should NOT trigger recompute anymore
+      sig1.value = 100;
+      expect(computeCount).toBe(4); // Still 4, no recompute
+    });
   });
 
   describe("Performance Characteristics", () => {

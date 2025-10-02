@@ -63,7 +63,6 @@ interface EffectNode {
   // TODO: Add nextSig property for next signal in the dependency chain (type: EffectNode | undefined)
   nextSig: EffectNode | undefined;
   // TODO: Add prevSig property for previous signal in the dependency chain (type: EffectNode | undefined)
-  prevSig: EffectNode | undefined;
   // TODO: Add effect property pointing back to the effect (type: LinkedEffect)
   effect: IEffect;
   unSub?: () => void;
@@ -179,17 +178,10 @@ export class LinkedEffect implements IEffect {
       // TODO: Set node.effect = this
       effect,
       // TODO: Insert at head of signals linked list:
-      nextSig: undefined,
-      prevSig: undefined,
+      nextSig: this._sigsHead,
       unSub: undefined,
     };
-    if (this._sigsHead) {
-      //   - If _sigsHead exists, set its prevSig to new node
-      this._sigsHead.prevSig = node;
-    }
 
-    //   - Set new node's nextSig to current _sigsHead
-    node.nextSig = this._sigsHead;
     //   - Set _sigsHead to new node
     this._sigsHead = node;
     // TODO: Subscribe to the signal (this will create the reverse SignalNode)
@@ -256,7 +248,7 @@ export class LinkedEffect implements IEffect {
     // TODO: For each EffectNode, call stored unsubscribe function
     while (current) {
       current.unSub?.();
-      current = current.prevSig;
+      current = current.nextSig;
     }
     // TODO: Set _sigsHead = undefined
     this._sigsHead = undefined;
@@ -295,18 +287,16 @@ export class LinkedComputedSignal<T>
       // TODO: Set node.effect = this
       effect,
       // TODO: Insert at head of signals linked list:
-      nextSig: undefined,
-      prevSig: undefined,
+      nextSig: this._sigsHead,
+      // prevSig: undefined,
       unSub: undefined,
     };
 
-    if (this._sigsHead) {
-      //   - If _sigsHead exists, set its prevSig to new node
-      this._sigsHead.prevSig = node;
-    }
+    // if (this._sigsHead) {
+    //   //   - If _sigsHead exists, set its prevSig to new node
+    //   this._sigsHead.prevSig = node;
+    // }
 
-    //   - Set new node's nextSig to current _sigsHead
-    node.nextSig = this._sigsHead;
     //   - Set _sigsHead to new node
     this._sigsHead = node;
     // TODO: Subscribe to the signal (this will create the reverse SignalNode)
@@ -425,7 +415,7 @@ export class LinkedComputedSignal<T>
     // TODO: For each EffectNode, call stored unsubscribe function
     while (current) {
       current.unSub?.();
-      current = current.prevSig;
+      current = current.nextSig;
     }
     this._sigsHead = undefined;
     // TODO: Set _sigsHead = undefined

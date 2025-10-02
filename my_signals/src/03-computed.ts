@@ -250,6 +250,10 @@ export class ComputedSignal<T>
       setContext(prevContext);
     }
   }
+
+  dispose() {
+    this._unsubscribeFromDependencies();
+  }
 }
 
 /**

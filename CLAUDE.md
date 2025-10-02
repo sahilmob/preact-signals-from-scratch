@@ -186,20 +186,41 @@ This ensures the learner writes the code themselves while getting appropriate gu
 - LinkedComputedSignal remains lazy - only invalidates on dependency changes
 - Correct traversal direction using `nextDep`/`nextSig` pointers
 - Memory testing configuration using Node.js `process.memoryUsage()` API
+- **Critical Bug Fix**: Corrected `_clearDependencies()` to use `nextSig` instead of `prevSig` for proper traversal
+  - Bug: Using `prevSig` only cleared the head node (since head.prevSig = undefined)
+  - Fix: Use `nextSig` to traverse entire list from head to tail
+  - Impact: Prevents memory leaks when computed signals have multiple dependencies
+- **Optimization**: Removed redundant `prevSig` pointer from `EffectNode` interface
+  - Effects use "clear all and rebuild" pattern, never selectively removing individual dependencies
+  - Only need forward traversal via `nextSig` for bulk clearing
+  - Saves 8 bytes per dependency compared to doubly-linked implementation
 
 **Performance Benefits**:
-- **Memory**: Eliminate Set object overhead (50-75% memory reduction per dependency)
-- **Speed**: O(1) operations instead of Set hash operations
+- **Memory**: 3-4% memory reduction in typical scenarios (100 signal+computed pairs)
+  - Set-based: 117,704 bytes vs Linked lists: 113,416 bytes
+  - Savings: 4,288 bytes (eliminates Set overhead and hash table allocations)
+- **Speed**: Comparable performance to Set-based implementation
+  - Insertion: 0.67ms (Set) vs 0.70ms (Linked) - similar
+  - Notification (100 deps): 0.03ms both - identical
+  - Cleanup (500 disposals): 0.07ms both - identical
 - **Cache**: Better memory locality for dependency traversal
 - **GC**: Reduced garbage collection pressure from fewer objects
-- **Benchmarks**: 1000 dependency insertions in ~13ms, notifications in <1ms
+- **Tradeoffs**: Deep chains slightly slower (0.05ms vs 0.14ms for 50 levels) due to pointer chasing
 
 **Testing Achievements**:
-- 22/22 tests passing with full coverage
+- 25/25 tests passing with full coverage
 - Performance benchmarking for insertion and notification
 - Memory usage tracking with proper Node.js API configuration
 - Complete compatibility with Phase 3 computed signal functionality
 - Unsubscription and cleanup validation
+- **New Tests Added**:
+  - Multiple dependency clearing during recomputation
+  - Complete disposal cleanup verification (all signals unsubscribed)
+  - Dynamic/conditional dependencies with proper cleanup
+- **Performance Comparison Tests**:
+  - Head-to-head comparison with Set-based implementation across 6 metrics
+  - Memory efficiency, insertion speed, notification speed, cleanup speed
+  - Deep dependency chains, per-node memory overhead analysis
 
 ### 🔄 Next: Phase 5 - Batching
 Ready to implement transaction-like update batching to optimize multiple signal changes.
@@ -224,11 +245,19 @@ Ready to implement transaction-like update batching to optimize multiple signal 
 3. **Traversal Direction**: Forward traversal via `nextDep`/`nextSig` from head to tail
 4. **Unsubscription**: Proper pointer rewiring maintains list integrity when removing middle nodes
 5. **Memory Efficiency**: Intrusive linked lists reduce allocations and improve cache locality
+6. **Asymmetric Link Design** (CRITICAL):
+   - **`SignalNode` (Signal→Effects)**: Doubly-linked with `prevDep`/`nextDep` - needed for O(1) removal when individual effects dispose
+   - **`EffectNode` (Effect→Signals)**: Singly-linked with only `nextSig` - `prevSig` is redundant because effects use "clear all and rebuild" pattern
+   - **Why the difference?**: When an effect disposes, the signal must remove just that one effect from its dependents list (selective removal). But effects always clear ALL dependencies at once during re-run (bulk clear), never removing individual signals
+   - **Memory savings**: Removing unused `prevSig` pointer saves 8 bytes per dependency
+7. **Clear and Rebuild Pattern**: Effects never selectively remove dependencies - they clear everything and re-subscribe on each run, making backward pointers unnecessary
 
 ### Common Pitfalls Avoided:
 - Infinite loops from immediate effect re-execution
 - Memory leaks from untracked subscriptions
 - Double notifications from calling both parent and child setters
 - Eager recomputation breaking computed signal laziness
-- Incorrect linked list traversal directions
+- Incorrect linked list traversal directions (using `prevSig` when `nextSig` is needed)
 - Broken list chains from improper node removal
+- Only clearing first dependency due to wrong traversal pointer
+- Unnecessary bidirectional links when singly-linked lists suffice (wasted memory)

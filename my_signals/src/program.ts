@@ -1,10 +1,9 @@
-import { effect, reactiveSignal } from "./02-effects.ts";
-import { computed } from "./03-computed.ts";
+import { linkedReactiveSignal, linkedEffect } from "./04-linked-lists";
 
-const s = reactiveSignal(42);
-const c = computed(() => s.value + 2);
+const s = linkedReactiveSignal(42);
+const s1 = linkedReactiveSignal(42);
+linkedEffect(() => {
+  console.log(s.value + s1.value);
+});
 
-s.value = 44;
-
-console.log(c.value);
-console.log(c.value);
+console.log((s1 as any)._depsHead);
