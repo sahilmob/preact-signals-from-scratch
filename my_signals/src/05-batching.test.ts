@@ -13,9 +13,14 @@ import {
   batchedEffect,
   batchedComputed,
   batch,
+  // __resetBatchingState,
 } from "./05-batching.ts";
 
 describe("Phase 5: Batching", () => {
+  // beforeEach(() => {
+  //   // Reset global batching state before each test
+  //   __resetBatchingState();
+  // });
   describe("BatchedSignal", () => {
     it("should update value immediately when not batching", () => {
       const sig = batchedSignal(0);

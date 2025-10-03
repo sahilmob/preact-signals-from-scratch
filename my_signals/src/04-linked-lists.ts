@@ -72,12 +72,14 @@ interface EffectNode {
 export class LinkedReactiveSignal<T = any> extends ReactiveSignal<T> {
   // TODO: Replace _dependentEffects Set with linked list head
   // TODO: Add _depsHead property (type: SignalNode | undefined) - head of effects that depend on this signal
+  protected _depsTail?: SignalNode;
   protected _depsHead?: SignalNode;
 
   constructor(initialValue: T) {
     // TODO: Call parent constructor
     super(initialValue);
     // TODO: Initialize _depsHead as undefined
+    this._depsTail = undefined;
     this._depsHead = undefined;
   }
 
@@ -90,18 +92,23 @@ export class LinkedReactiveSignal<T = any> extends ReactiveSignal<T> {
     const node: SignalNode = {
       effect,
       signal,
-      prevDep: undefined,
-      nextDep: this._depsHead,
+      prevDep: this._depsTail,
+      nextDep: undefined,
     };
 
     // TODO: Insert at head of linked list:
     //   - If _depsHead exists, set its prevDep to new node
     //   - Set new node's nextDep to current _depsHead
-    if (this._depsHead) {
-      this._depsHead.prevDep = node;
+
+    if (this._depsTail) {
+      this._depsTail.nextDep = node;
+    }
+
+    if (!this._depsHead) {
+      this._depsHead = node;
     }
     //   - Set _depsHead to new node
-    this._depsHead = node;
+    this._depsTail = node;
     // TODO: Return unsubscribe function that removes this node from the linked list:
     return () => {
       if (node.prevDep) {
@@ -118,6 +125,13 @@ export class LinkedReactiveSignal<T = any> extends ReactiveSignal<T> {
       if (this._depsHead === node) {
         this._depsHead = node.nextDep;
       }
+
+      if (this._depsTail === node) {
+        this._depsTail = node.prevDep;
+      }
+
+      node.nextDep = undefined;
+      node.prevDep = undefined;
     };
   }
 

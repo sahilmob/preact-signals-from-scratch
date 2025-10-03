@@ -379,6 +379,9 @@ export class BatchedComputedSignal<T>
       current.unSub?.();
       current = current.nextSig;
     }
+
+    // CRITICAL: Reset head pointer to prevent stale references
+    this._sigsHead = undefined;
   }
 }
 
@@ -471,7 +474,7 @@ export function batch<T>(fn: () => T): T {
  */
 function flushPendingEffects(): void {
   // Convert Set to array and reverse to get FIFO (creation) order
-  const arr = Array.from(pendingEffects).reverse();
+  const arr = Array.from(pendingEffects);
   pendingEffects.clear();
 
   // Set flushing flag to prevent effects created during flush from being re-flushed
