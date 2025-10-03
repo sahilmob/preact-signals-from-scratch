@@ -6,6 +6,7 @@
  * - Learn transaction-like batching for update coalescing
  * - Discover deferred effect execution strategies
  * - Explore how Preact Signals minimizes redundant computations
+ * - Solve the diamond dependency problem with lazy evaluation
  *
  * Key Insights from Preact Signals:
  * 1. Multiple signal changes can trigger the same effect multiple times
@@ -13,10 +14,71 @@
  * 3. Effects run at most once per batch, even with multiple dependencies changing
  * 4. Batching reduces computational overhead by 50%+ in typical scenarios
  * 5. Transaction-like semantics provide consistent state snapshots
+ * 6. Diamond dependencies require special handling during batches
  *
  * The Magic: How does batching prevent redundant effect runs?
  * Answer: By collecting all signal changes in a batch, marking effects as pending,
  * and executing each effect only once after all signals have been updated.
+ *
+ * CRITICAL DESIGN DECISIONS:
+ * ========================
+ *
+ * 1. TWO-TIER BATCHING STRATEGY
+ *    - Regular effects: Collected in pendingEffects, run once after batch
+ *    - Computed signals: Only invalidate during batch, recompute on access (lazy)
+ *    Why? Prevents diamond dependency issues where one branch computes before another
+ *
+ * 2. DIAMOND DEPENDENCY PROBLEM & SOLUTION
+ *    Problem:
+ *      sig -> left  -> bottom
+ *          -> right -^
+ *    If left eagerly recomputes and triggers bottom, right hasn't updated yet!
+ *    Result: bottom computes with stale right value
+ *
+ *    Solution:
+ *      - During batch: All computed signals just invalidate (mark STALE)
+ *      - Invalidation propagates through the graph
+ *      - Effects are queued, not run
+ *      - After batch: Effects run, pulling fresh values lazily
+ *      - This ensures all branches update before any recomputation
+ *
+ * 3. FIFO EXECUTION ORDER
+ *    Effects must execute in creation order (FIFO, not LIFO)
+ *    Why? effect1 might dispose effect2 during run - must execute first!
+ *    Implementation: Tail-insertion in linked lists maintains natural FIFO order
+ *
+ * 4. RE-ENTRANCE PROTECTION
+ *    - isFlushing flag prevents mid-flush effects from joining current flush
+ *    - Effects that modify their own dependencies will be queued for next run
+ *
+ * 5. COMPUTED SIGNAL BEHAVIOR DURING BATCHES
+ *    Outside batch (Phase 4 behavior):
+ *      - Computed with dependents: Eagerly recompute, notify if changed
+ *      - Computed without dependents: Lazy, only invalidate
+ *
+ *    Inside batch (Phase 5 optimization):
+ *      - ALL computed signals: Just invalidate and propagate
+ *      - Recomputation deferred until accessed
+ *      - Prevents computing with partial/stale state
+ *
+ * PERFORMANCE BENEFITS:
+ * ====================
+ * - 50%+ reduction in effect runs for multi-signal updates
+ * - Eliminates duplicate executions from diamond patterns
+ * - Atomic updates: effects see consistent final state
+ * - Computed signals only recompute once per batch (when accessed)
+ *
+ * COMPARISON TO PHASE 4:
+ * =====================
+ * Phase 4 Issues:
+ *   - Diamond dependencies compute with stale values
+ *   - Effects can run multiple times per logical update
+ *   - No transaction semantics
+ *
+ * Phase 5 Improvements:
+ *   - Correct diamond dependency handling
+ *   - At-most-once effect execution per batch
+ *   - Atomic, consistent state snapshots
  */
 
 // Import previous phase implementations
@@ -33,26 +95,67 @@ import {
 import { IEffect, evalContext, getContext, setContext } from "./02-effects.ts";
 import { ComputedState } from "./03-computed.ts";
 
-// TODO: Define batching state management
+/**
+ * ============================================================================
+ * GLOBAL BATCHING STATE
+ * ============================================================================
+ *
+ * These variables control the batching behavior across the entire system.
+ * They're global because batching is a system-wide operation that affects
+ * all signals, computed signals, and effects.
+ */
 
 /**
- * Global batching state
- * - batchDepth: Tracks nesting level of batch() calls
- * - pendingEffects: Set of effects to run after batch completes
+ * batchDepth: Tracks nesting level of batch() calls
+ *
+ * - 0: Not batching, effects run immediately
+ * - 1+: Inside batch, effects deferred to pendingEffects
+ *
+ * Supports nested batches:
+ *   batch(() => {           // batchDepth = 1
+ *     batch(() => {         // batchDepth = 2
+ *       sig.value = 10;     // Effects still deferred
+ *     });                   // batchDepth = 1, no flush yet
+ *   });                     // batchDepth = 0, NOW flush!
  */
-// TODO: Add batchDepth variable (type: number, initial: 0)
 let batchDepth = 0;
-// TODO: Add pendingEffects variable (type: Set<IEffect>, initial: new Set())
+
+/**
+ * pendingEffects: Set of effects queued for execution after batch completes
+ *
+ * Using a Set ensures each effect runs at most once, even if multiple
+ * dependencies changed during the batch.
+ *
+ * Important: Computed signals are NOT added here - they handle batching
+ * differently (lazy invalidation instead of deferred execution)
+ */
 const pendingEffects: Set<IEffect> = new Set();
-// Track if we're currently flushing effects to prevent re-entrancy issues
+
+/**
+ * isFlushing: Prevents re-entrancy during effect flush
+ *
+ * Without this flag, an effect that creates new effects during flush
+ * could cause those new effects to be added to the current flush,
+ * potentially causing infinite loops or unexpected behavior.
+ *
+ * When true: New effects created during flush wait for next batch
+ */
 let isFlushing = false;
 
 /**
- * BatchedSignal - Signal that defers notifications during batches
+ * ============================================================================
+ * BATCHED SIGNAL
+ * ============================================================================
+ *
+ * A signal that participates in the batching system. When its value changes
+ * during a batch, it defers notifying effects until the batch completes.
+ *
+ * Key behavior:
+ * - Outside batch: Immediate notification (same as Phase 4)
+ * - Inside batch: Defer effect notification, but immediately invalidate computed signals
  */
 export class BatchedSignal<T = any> extends LinkedReactiveSignal<T> {
   constructor(initialValue: T) {
-    // TODO: Call parent constructor
     super(initialValue);
   }
 
@@ -61,36 +164,58 @@ export class BatchedSignal<T = any> extends LinkedReactiveSignal<T> {
   }
 
   set value(newValue: T) {
-    // TODO: Check if value actually changed using Object.is
-    // TODO: If not changed, return early
+    // Skip notification if value hasn't actually changed
+    // This is an important optimization that prevents unnecessary recomputations
     if (Object.is(newValue, this._value)) return;
-    // TODO: Update _value
+
     this._value = newValue;
-    // TODO: Call _notifyDependentEffects() which respects batching
     this._notifyDependentEffects();
   }
 
+  /**
+   * Notify dependent effects and computed signals about value change
+   *
+   * TWO-TIER NOTIFICATION STRATEGY:
+   * ================================
+   *
+   * During batch (batchDepth > 0):
+   *   1. Computed signals: Call onDependencyChange() immediately
+   *      - They invalidate themselves (mark STALE)
+   *      - They propagate invalidation to their dependents
+   *      - They DON'T recompute yet (deferred until accessed)
+   *
+   *   2. Regular effects: Add to pendingEffects Set
+   *      - They don't run yet
+   *      - Will run once after batch completes
+   *      - Set ensures each runs at most once
+   *
+   * Outside batch (batchDepth === 0) OR during flush (isFlushing):
+   *   - Use parent's immediate notification (Phase 4 behavior)
+   *   - Effects run immediately
+   *   - Computed signals eagerly recompute if they have dependents
+   *
+   * WHY THE DISTINCTION?
+   * - Computed signals need to propagate invalidation immediately
+   *   to ensure the entire dependency graph is marked stale
+   * - But they defer recomputation to avoid computing with partial state
+   * - Regular effects are purely reactive consumers, so they can wait
+   */
   protected _notifyDependentEffects(): void {
-    // TODO: Check if currently batching (batchDepth > 0)
-    //   If batching:
     if (batchDepth > 0 && !isFlushing) {
-      //     - Traverse _depsHead linked list
+      // BATCHING MODE: Defer effects, immediately invalidate computed signals
       let current = this._depsHead;
       while (current) {
-        // Computed signals must be invalidated immediately, not batched
-        // Only regular effects get batched
         if (current.effect instanceof BatchedComputedSignal) {
+          // Computed signal: Invalidate immediately (propagates STALE state)
           current.effect.onDependencyChange();
         } else {
-          //     - Add non-computed effects to pendingEffects Set
+          // Regular effect: Defer until batch completes
           pendingEffects.add(current.effect);
         }
         current = current.nextDep;
-        //     - DO NOT call regular effect.onDependencyChange() yet
       }
     } else {
-      //   If NOT batching OR we're flushing:
-      //     - Call parent implementation (immediate notification)
+      // IMMEDIATE MODE: Use parent's notification (Phase 4 behavior)
       super._notifyDependentEffects();
     }
   }
@@ -225,27 +350,70 @@ export class BatchedEffect implements IEffect {
 }
 
 /**
- * BatchedComputedSignal - Computed signal that respects batching
+ * ============================================================================
+ * BATCHED COMPUTED SIGNAL - THE KEY TO SOLVING DIAMOND DEPENDENCIES
+ * ============================================================================
+ *
+ * A computed signal that correctly handles batching and diamond dependencies.
+ *
+ * DUAL ROLE:
+ * - Acts as a Signal: Has dependents (effects or other computed signals)
+ * - Acts as an Effect: Has dependencies (signals or other computed signals)
+ *
+ * CRITICAL BATCHING BEHAVIOR:
+ * ===========================
+ *
+ * Outside batch (batchDepth === 0):
+ *   - Lazy if no dependents: Invalidate only, recompute when accessed
+ *   - Eager if has dependents: Recompute immediately to check if value changed
+ *     (Prevents unnecessary effect runs if computed value doesn't change)
+ *
+ * Inside batch (batchDepth > 0): *** THE KEY INSIGHT ***
+ *   - ALWAYS lazy: Just invalidate and propagate, never recompute
+ *   - This prevents the diamond dependency problem!
+ *
+ * THE DIAMOND DEPENDENCY PROBLEM:
+ * ==============================
+ *
+ *     sig
+ *    /   \
+ *  left  right    (both depend on sig)
+ *    \   /
+ *    bottom       (depends on both left and right)
+ *
+ * Without batching fix:
+ *   1. sig.value = X
+ *   2. left gets invalidated, has dependent (bottom), so eagerly recomputes
+ *   3. left notifies bottom
+ *   4. bottom tries to recompute: left.value (fresh) + right.value (STALE!)
+ *   5. Result: bottom computes with old right value = WRONG!
+ *
+ * With batching fix (this implementation):
+ *   1. sig.value = X (during batch)
+ *   2. left gets invalidated, just marks STALE and propagates
+ *   3. right gets invalidated, just marks STALE and propagates
+ *   4. bottom gets invalidated, just marks STALE
+ *   5. Batch ends, effects run
+ *   6. Effect reads bottom.value (lazy evaluation)
+ *   7. bottom recomputes: left.value (recomputes to fresh) + right.value (recomputes to fresh)
+ *   8. Result: bottom computes with ALL fresh values = CORRECT!
+ *
+ * The key: Defer ALL recomputation until AFTER all invalidations propagate
  */
 export class BatchedComputedSignal<T>
   extends BatchedSignal<T>
   implements IEffect
 {
-  // TODO: Add all computed signal properties from Phase 4
   private _computeFn: () => T;
   private _state: ComputedState;
   private _error: any;
-  private _isComputed = true;
-  // TODO: Add linked list properties for tracking dependencies as an effect
   private _isDisposed = false;
   private _sigsHead: EffectNode | undefined = undefined;
-  // TODO: Add _isPending property for batch tracking
 
   constructor(computeFn: () => T) {
     super(undefined as any);
     this._state = ComputedState.STALE;
     this._computeFn = computeFn;
-    // TODO: Initialize like LinkedComputedSignal but with batching support
   }
 
   addDependency(signal: LinkedReactiveSignal<any>): void {
@@ -329,39 +497,99 @@ export class BatchedComputedSignal<T>
     }
   }
 
+  /**
+   * Called when a dependency changes - CRITICAL METHOD FOR DIAMOND DEPENDENCIES
+   *
+   * This method implements the core algorithm that solves the diamond dependency problem.
+   *
+   * ALGORITHM:
+   * ==========
+   *
+   * 1. Early returns:
+   *    - If disposed: Do nothing
+   *    - If already STALE or COMPUTING: Do nothing (avoid redundant work)
+   *
+   * 2. Mark STALE:
+   *    - Always invalidate self first (FRESH/ERROR → STALE)
+   *
+   * 3. Branching logic based on context:
+   *
+   *    A) DURING BATCH (batchDepth > 0):
+   *       - Just propagate invalidation (call _notifyDependentEffects)
+   *       - DO NOT recompute yet!
+   *       - This ensures ALL branches of diamond invalidate before ANY recompute
+   *
+   *    B) OUTSIDE BATCH, NO DEPENDENTS:
+   *       - Stay lazy (already marked STALE)
+   *       - Will recompute when accessed
+   *
+   *    C) OUTSIDE BATCH, HAS DEPENDENTS:
+   *       - Eagerly recompute to check if value changed
+   *       - Only notify dependents if value actually changed
+   *       - Optimization: Prevents effect runs when computed value doesn't change
+   *
+   * WHY THIS WORKS FOR DIAMOND DEPENDENCIES:
+   * ========================================
+   *
+   * Consider: sig -> left -> bottom
+   *                -> right -^
+   *
+   * When sig changes during batch:
+   *   1. sig._notifyDependentEffects() is called
+   *   2. Both left and right get onDependencyChange() called
+   *   3. left: marks STALE, propagates to bottom (doesn't recompute!)
+   *   4. right: marks STALE, propagates to bottom (doesn't recompute!)
+   *   5. bottom: marks STALE (now knows BOTH dependencies changed)
+   *   6. Batch ends, effects run
+   *   7. Effect accesses bottom.value
+   *   8. bottom recomputes (STALE → COMPUTING)
+   *   9. bottom reads left.value → left recomputes to FRESH
+   *  10. bottom reads right.value → right recomputes to FRESH
+   *  11. bottom computes with ALL fresh values → CORRECT!
+   *
+   * The critical insight: Invalidation propagates immediately, but recomputation
+   * is deferred until all invalidations complete. This ensures consistency.
+   */
   onDependencyChange(): void {
-    // TODO: Check if disposed
+    // Guard: Disposed computed signals don't react
     if (this._isDisposed) return;
 
-    // If we have no dependents, stay lazy - just invalidate
-    if (!this._depsHead) {
-      if (
-        this._state === ComputedState.FRESH ||
-        this._state === ComputedState.ERROR
-      ) {
-        this._state = ComputedState.STALE;
-      }
+    // Guard: Only invalidate if currently FRESH or ERROR
+    // If already STALE or COMPUTING, nothing to do
+    if (
+      this._state !== ComputedState.FRESH &&
+      this._state !== ComputedState.ERROR
+    ) {
       return;
     }
 
-    // If we DO have dependents, eagerly recompute to check if value changed
-    // Only notify dependents if the value actually changes
-    if (
-      this._state === ComputedState.FRESH ||
-      this._state === ComputedState.ERROR
-    ) {
-      const oldValue = this._value;
-      this._state = ComputedState.STALE;
+    // Step 1: Always invalidate self first
+    this._state = ComputedState.STALE;
 
-      // Eagerly recompute to see if value changed
-      // Pass shouldNotify=true since we're being invalidated (pushed), not accessed (pulled)
-      try {
-        this._recompute(true);
-        // _recompute(true) will notify if value changed
-      } catch (error) {
-        // On error, always notify dependents
-        this._notifyDependentEffects();
-      }
+    // Step 2: During batch - just propagate, don't recompute
+    // This is THE KEY to solving diamond dependencies!
+    if (batchDepth > 0) {
+      // Propagate invalidation to dependents
+      // They will also just invalidate (if they're computed) or queue (if they're effects)
+      this._notifyDependentEffects();
+      return;
+    }
+
+    // Step 3: Outside batch, no dependents - stay lazy
+    if (!this._depsHead) {
+      return; // Will recompute on next access
+    }
+
+    // Step 4: Outside batch, has dependents - eagerly recompute
+    // This is an optimization: only notify if value actually changed
+    try {
+      // Pass shouldNotify=true because we're being pushed to (invalidated)
+      // not pulled from (accessed via .value getter)
+      this._recompute(true);
+      // _recompute will notify dependents only if value changed
+    } catch (error) {
+      // On error, always notify dependents so they know something happened
+      this._notifyDependentEffects();
     }
   }
 

@@ -252,62 +252,98 @@ This ensures the learner writes the code themselves while getting appropriate gu
 
 ### ✅ Phase 5: Batching (COMPLETE)
 
-**Full Implementation** - Transaction-like update batching to coalesce multiple signal changes and minimize redundant effect executions.
+**Full Implementation** - Transaction-like update batching with correct diamond dependency handling.
 
 **Key Features Implemented**:
 
-- `BatchedSignal<T>` that defers notifications during batch operations
-- `BatchedEffect` that queues for execution instead of running immediately during batches
-- `BatchedComputedSignal<T>` with eager recomputation when dependencies change
+- `BatchedSignal<T>` that defers effect notifications during batch operations
+- `BatchedEffect` that queues for execution during batches
+- `BatchedComputedSignal<T>` with **lazy invalidation during batches** (solves diamond dependencies!)
 - `batch()` function for wrapping multiple updates in a transaction
 - `pendingEffects` Set to collect effects that need to run after batch completes
 - `isFlushing` flag to prevent re-entrancy issues during effect flush
 - Nested batch support with `batchDepth` counter
+- FIFO execution order through tail-insertion in linked lists
 
-**Key Issues Resolved in Phase 5**:
+**Critical Issues Resolved in Phase 5**:
 
-- **Computed Signal Notification**: Computed signals eagerly recompute when invalidated if they have dependents, checking if value actually changed before notifying
-- **Lazy vs Eager Balance**: Computed signals with no dependents stay lazy, but with dependents they eagerly recompute to avoid unnecessary effect runs
-- **shouldNotify Parameter**: Added to `_recompute()` to distinguish between pull (getter access) and push (invalidation) scenarios
-- **Computed Chain Propagation**: Computed signals are never batched - they immediately invalidate and notify during batch, allowing chains to propagate correctly
-- **Effect Disposal During Flush**: Effects check `_isDisposed` before running during flush to handle mid-flush disposal
-- **Flush Re-entrancy**: `isFlushing` flag ensures effects created/modified during flush don't interfere with current flush
-- **FIFO Execution Order (CRITICAL FIX)**: Array reversal ensures effects execute in creation order
-  - Problem: Head-insertion in linked lists causes LIFO order (newest first)
-  - Signal subscriptions: effect1 → effect2 inserted becomes `_depsHead: effect2 → effect1`
-  - Notification traversal adds to Set in LIFO order: `[effect2, effect1]`
-  - Solution: Reverse array before flush: `[effect2, effect1].reverse() = [effect1, effect2]`
-  - Why it matters: effect1 can dispose effect2 during run - must execute first!
-  - Preact approach: Double reversal via prepending to linked list during notify
-  - Our approach: Single explicit reversal - simpler and equally correct
-- **Effects Created During Batch (Design Decision)**: Defer execution until batch completes
-  - Alternative: Run immediately (Preact's approach, maintains "first run immediate" contract)
-  - Chosen: Add to pendingEffects and defer (atomic semantics, sees final state)
-  - Tradeoff: Breaks Phase 2-4 immediate execution, but provides stronger consistency
-  - Documented extensively in code for learning purposes
+1. **THE DIAMOND DEPENDENCY PROBLEM** ⭐ (Most Important Fix)
+   - **Problem**: sig → left → bottom; sig → right → bottom
+     When sig changes, left eagerly recomputes and triggers bottom, but right hasn't updated yet!
+     Result: bottom computes with stale right value
+
+   - **Root Cause**: Phase 4's eager recomputation during invalidation
+
+   - **Solution**: During batches, computed signals ONLY invalidate (mark STALE) and propagate
+     - No recomputation during batch!
+     - Invalidation wave propagates through entire graph first
+     - After batch, effects run and pull values lazily
+     - Each computed recomputes on-demand with all dependencies fresh
+
+   - **Implementation**: `BatchedComputedSignal.onDependencyChange()` checks `batchDepth > 0`
+     ```typescript
+     if (batchDepth > 0) {
+       this._state = ComputedState.STALE;
+       this._notifyDependentEffects(); // Propagate, don't recompute!
+       return;
+     }
+     ```
+
+2. **Memory Leaks**: `BatchedComputedSignal._clearDependencies()` now properly sets `_sigsHead = undefined`
+
+3. **FIFO Execution Order**: Tail-insertion in linked lists (Phase 4 change) maintains natural creation order
+   - Effect1 created first → effect1 at head
+   - Effect2 created second → effect2 at tail
+   - Traversal from head → [effect1, effect2] = FIFO ✓
+   - Critical for disposal: effect1 can dispose effect2 during run
+
+4. **Effects Created During Batch**: Defer to pendingEffects (atomic semantics)
+
+5. **Flush Re-entrancy**: `isFlushing` prevents mid-flush effects from joining current flush
 
 **Architecture Decisions**:
 
-1. **Two-Tier Batching**:
-   - Computed signals: NEVER batched, always invalidate immediately to propagate through chains
-   - Regular effects: Batched, collected in `pendingEffects` and run once after batch completes
-2. **Eager Computed Recomputation**: When computed signals have dependents, they eagerly recompute on invalidation to check if notification is needed (prevents wasted effect runs)
-3. **Notification Strategy**: Computed signals use `shouldNotify` parameter to only notify when being invalidated (push), not when accessed (pull)
+1. **Two-Tier Batching Strategy**:
+   - **Computed signals**: Invalidate immediately during batch, recompute lazily on access
+     Why? Must propagate invalidation through graph to solve diamond dependencies
+   - **Regular effects**: Queue in pendingEffects, run once after batch
+     Why? Pure consumers, don't need to run during invalidation wave
+
+2. **Lazy vs Eager Computed Signals**:
+   - **Inside batch**: ALWAYS lazy (just invalidate, defer recomputation)
+   - **Outside batch, no dependents**: Lazy (invalidate only)
+   - **Outside batch, has dependents**: Eager (recompute to check if value changed)
+
+3. **Push vs Pull Distinction**:
+   - Push (invalidation): `shouldNotify = true` → notify if value changed
+   - Pull (access): `shouldNotify = false` → don't notify (avoid cycles)
 
 **Testing Achievements**:
 
-- 29/31 tests passing (94% success rate)
-- Full coverage of basic batching, nested batches, computed signal optimization
-- Diamond dependency patterns handled correctly
-- Deep dependency chains work properly
-- Performance optimization validated (50%+ reduction in effect runs)
-- 2 edge case failures related to complex effect lifecycle scenarios during batches (known limitations for learning exercise)
+- **38/38 tests passing** (100% success rate!) ✅
+  - 31 batching behavior tests
+  - 7 performance comparison tests
+- Diamond dependency test validates correct value computation
+- Performance test shows Phase 5 fixes Phase 4's diamond bug
+- Nested batches work correctly
+- Effect disposal during batch handled properly
+- 50%+ reduction in effect runs validated
 
 **Performance Benefits**:
 
 - **Effect Runs**: 50%+ reduction when multiple signals change together
-- **Consistency**: All updates appear atomic - effects see final state, not intermediate states
-- **Scalability**: Handles large numbers of updates efficiently (1000+ updates tested)
+- **Diamond Correctness**: Phase 5 computes correctly, Phase 4 has stale value bug
+- **Consistency**: All updates atomic - effects see final state, not intermediate
+- **Scalability**: 1000+ updates tested successfully
+
+**Comparison to Phase 4**:
+
+| Aspect | Phase 4 | Phase 5 |
+|--------|---------|---------|
+| Diamond Dependencies | ❌ Computes with stale values | ✅ Correct lazy evaluation |
+| Effect Runs | Multiple per update | At most once per batch |
+| Transaction Semantics | None | Full atomic updates |
+| Computed Recomputation | Eager (during invalidation) | Lazy during batch, eager outside |
 
 ### 🔄 Next: Phase 6 - Advanced Features
 
@@ -345,40 +381,97 @@ Ready to implement cycle detection, error handling, and other advanced reactive 
 
 ### Phase 5 Critical Insights:
 
-1. **Two-Tier Batching Strategy**: Computed signals are never batched (always invalidate immediately), only regular effects are batched
-2. **Eager-When-Observed Pattern**: Computed signals without dependents stay lazy, but with dependents they eagerly recompute to check if notification is needed
-3. **Push vs Pull Distinction**: Computed signals use `shouldNotify` parameter to distinguish invalidation (push, should notify) from access (pull, should not notify)
-4. **Flush Re-entrancy Protection**: `isFlushing` flag prevents effects created during flush from being added to current flush
-5. **Disposal During Flush**: Effects must check `_isDisposed` immediately before running, not at start of flush loop
-6. **Nested Batch Support**: `batchDepth` counter allows batches within batches, only flushing when outermost batch completes
-7. **Computed Chain Propagation**: Not batching computed signals ensures dependency chains (sig → computed1 → computed2 → effect) propagate correctly during batches
-8. **FIFO Execution Order (Critical)**: Head-insertion in linked lists causes LIFO notification order, requiring explicit array reversal to restore FIFO (creation order) execution
-   - **The problem**: effect1 subscribes first but becomes tail; effect2 subscribes second, becomes head
-   - **During notify**: Traverse from head → adds to Set as [effect2, effect1] (LIFO)
-   - **The fix**: Reverse array before flush to get [effect1, effect2] (FIFO)
-   - **Why critical**: effect1 might dispose effect2 during run - must execute first to prevent disposed effects from running
-   - **Preact's approach**: Double reversal via prepending during notification (effect.\_nextBatchedEffect = batchedEffect)
-   - **Our approach**: Single explicit reversal - simpler, same correctness guarantee
-9. **Effects Created During Batch**: Design choice to defer execution until batch completes (alternative: run immediately like Preact)
-   - **Pros**: Atomic semantics (sees final state), consistency (all batch participants deferred), performance
-   - **Cons**: Breaks "first run immediate" contract, deferred dependency discovery, potential user surprise
-   - **Chosen approach**: Defer for stronger consistency guarantees, documented as learning exploration of design tradeoffs
+1. **The Diamond Dependency Problem and Solution** ⭐⭐⭐ (MOST CRITICAL LEARNING)
+   - **Problem**: In a diamond graph (sig → left/right → bottom), when sig changes:
+     - Without fix: left eagerly recomputes → triggers bottom → bottom uses stale right value = WRONG
+   - **Root cause**: Eager recomputation during invalidation (Phase 4 behavior)
+   - **Solution**: During batches, computed signals ONLY invalidate (mark STALE), never recompute
+     - Invalidation wave propagates through entire graph first
+     - After wave completes, effects run and pull values lazily
+     - Each computed recomputes on-demand with ALL dependencies fresh
+   - **Key insight**: Separate invalidation propagation from recomputation timing
+   - **Why this works**: Defers ALL recomputation until AFTER all invalidations complete
+
+2. **Two-Tier Batching Strategy**: Different behavior for computed signals vs effects
+   - **Computed signals**: During batch, invalidate and propagate (never batch the invalidation itself!)
+     - Why? Must propagate through graph to solve diamond dependencies
+     - Recomputation is lazy (deferred to access time)
+   - **Regular effects**: During batch, add to pendingEffects and defer execution
+     - Why? Pure consumers, no downstream propagation needed
+
+3. **Conditional Eager Recomputation** (Outside Batches Only):
+   - With dependents: Eagerly recompute on invalidation to check if value changed
+     - Optimization: Only notify if value actually changed (prevents wasted effect runs)
+   - Without dependents: Stay lazy (invalidate only, recompute on access)
+
+4. **Push vs Pull Distinction**: `shouldNotify` parameter
+   - Push (invalidation): `shouldNotify = true` → notify dependents if value changed
+   - Pull (access): `shouldNotify = false` → don't notify (avoid notification cycles)
+
+5. **FIFO Execution Order**: Tail-insertion in linked lists (from Phase 4 change)
+   - Effect1 created first → inserted at head
+   - Effect2 created second → inserted at tail (after effect1)
+   - Traversal from head → [effect1, effect2] = FIFO ✓
+   - **Why critical**: effect1 might dispose effect2 during run - must execute first!
+
+6. **Re-entrance Protection**: `isFlushing` flag
+   - Prevents effects created during flush from joining current flush
+   - Effects that modify their own dependencies are queued for next run (via pendingEffects)
+   - Guards against infinite loops and unexpected behavior
+
+7. **Nested Batch Support**: `batchDepth` counter tracks nesting level
+   - Only flush when outermost batch completes (batchDepth → 0)
+   - Inner batches just increment/decrement counter
+
+8. **Disposal During Flush**: Check `_isDisposed` immediately before running each effect
+   - Not at start of loop (effect might get disposed mid-flush by another effect)
+
+9. **Effects Created During Batch**: Deferred until batch completes
+   - Alternative: Run immediately (Preact's approach)
+   - Chosen: Defer for atomic semantics and consistency
+   - Tradeoff: Breaks "first run immediate" contract, but provides stronger guarantees
 
 ### Common Pitfalls Avoided:
 
+**Phase 2-3 Issues:**
 - Infinite loops from immediate effect re-execution
 - Memory leaks from untracked subscriptions
 - Double notifications from calling both parent and child setters
 - Eager recomputation breaking computed signal laziness
+
+**Phase 4 Issues:**
 - Incorrect linked list traversal directions (using `prevSig` when `nextSig` is needed)
 - Broken list chains from improper node removal
 - Only clearing first dependency due to wrong traversal pointer
 - Unnecessary bidirectional links when singly-linked lists suffice (wasted memory)
-- Batching computed signals (breaks chain propagation)
-- Not distinguishing push vs pull in computed recomputation (causes notification at wrong times)
-- Checking disposal at start of flush instead of immediately before running (disposed effects still execute)
-- **LIFO execution order from head-insertion** (critical batching bug - disposed effects can run!)
-  - Head-insertion causes newest subscriber at front of linked list
-  - Traversing from head produces reverse-creation-order (LIFO)
-  - Without reversal: effect2 runs before effect1, can execute after being disposed by effect1
-  - Fix: Reverse array before flush to restore creation order (FIFO)
+
+**Phase 5 Critical Issues:**
+- **Diamond dependency stale value bug** ⭐ (MOST IMPORTANT)
+  - Problem: Eager recomputation during invalidation causes computed signals to read stale dependencies
+  - Symptom: In `sig → left/right → bottom`, bottom computes with old right when sig changes
+  - Fix: Defer ALL recomputation until after ALL invalidations propagate (lazy evaluation during batch)
+  - This was a fundamental flaw in Phase 4 that only batching could solve!
+
+- **LIFO execution order** (critical for disposal)
+  - Problem: If using head-insertion, effects run in reverse creation order
+  - Symptom: effect2 runs before effect1, even if effect1 disposes effect2 during run
+  - Fix: Tail-insertion maintains natural FIFO order
+
+- **Batching computed signal invalidation** (breaks chain propagation)
+  - Problem: If computed signals don't propagate invalidation during batch, downstream signals stay FRESH
+  - Symptom: Computed chains don't update correctly
+  - Fix: Computed signals always invalidate immediately, only recomputation is deferred
+
+- **Not distinguishing push vs pull** in computed recomputation
+  - Problem: Notifying on every recomputation (including .value access) causes cycles
+  - Fix: `shouldNotify` parameter - only notify when invalidated (push), not when accessed (pull)
+
+- **Checking disposal at wrong time during flush**
+  - Problem: Checking `_isDisposed` at start of loop misses mid-flush disposals
+  - Symptom: Disposed effect still runs if disposed by earlier effect in same flush
+  - Fix: Check `_isDisposed` immediately before running each effect
+
+- **Memory leaks from incomplete cleanup**
+  - Problem: `_clearDependencies()` doesn't reset `_sigsHead` to undefined
+  - Symptom: Stale pointer references prevent garbage collection
+  - Fix: Always set `_sigsHead = undefined` after clearing
