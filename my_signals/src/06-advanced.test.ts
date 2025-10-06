@@ -15,7 +15,7 @@ import {
   AdvancedComputedSignal,
 } from "./06-advanced.ts";
 
-describe.skip("Phase 6: Advanced APIs", () => {
+describe("Phase 6: Advanced APIs", () => {
   describe("untracked()", () => {
     it("should execute function without tracking dependencies", () => {
       const sig = advancedSignal(0);

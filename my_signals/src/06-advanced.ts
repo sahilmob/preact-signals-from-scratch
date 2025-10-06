@@ -28,7 +28,7 @@ import {
   batchedComputed,
   batch,
 } from "./05-batching.ts";
-import { evalContext, getContext, setContext } from "./02-effects.ts";
+import { evalContext, getContext, IEffect, setContext } from "./02-effects.ts";
 
 /**
  * untracked() - Execute code without tracking dependencies
@@ -48,11 +48,18 @@ import { evalContext, getContext, setContext } from "./02-effects.ts";
  */
 export function untracked<T>(fn: () => T): T {
   // TODO: Save current evalContext
+  const prevContext = getContext();
   // TODO: Set evalContext to undefined (disables tracking)
+  setContext(undefined);
   // TODO: Execute fn() inside try block
-  // TODO: Restore previous evalContext in finally block
-  // TODO: Return fn() result
-  throw new Error("TODO: Implement untracked");
+  try {
+    const result = fn();
+    // TODO: Return fn() result
+    return result;
+  } finally {
+    // TODO: Restore previous evalContext in finally block
+    setContext(prevContext);
+  }
 }
 
 /**
@@ -66,6 +73,8 @@ export class AdvancedSignal<T = any> extends BatchedSignal<T> {
   constructor(initialValue: T, options?: SignalOptions<T>) {
     super(initialValue);
     // TODO: Store lifecycle hooks from options
+    this._watched = options?.watched;
+    this._unwatched = options?.unwatched;
   }
 
   /**
@@ -80,7 +89,23 @@ export class AdvancedSignal<T = any> extends BatchedSignal<T> {
   peek(): T {
     // TODO: Use untracked() to read this.value without creating dependency
     // TODO: Return the value
-    throw new Error("TODO: Implement peek");
+    return untracked(() => this.value);
+  }
+  subscribeEffect(effect: IEffect): () => void {
+    const wasWatched = this._depsHead !== undefined;
+    const unsubscribe = super.subscribeEffect(effect);
+
+    if (!wasWatched && this._watched) {
+      this._onWatched();
+    }
+
+    return () => {
+      unsubscribe();
+
+      if (this._depsHead === undefined && this._unwatched) {
+        this._onUnwatched();
+      }
+    };
   }
 
   /**
@@ -98,12 +123,13 @@ export class AdvancedSignal<T = any> extends BatchedSignal<T> {
    *   // Later: dispose() to unsubscribe
    */
   subscribe(fn: (value: T) => void): () => void {
-    // TODO: Create an effect using batchedEffect()
-    // TODO: Inside effect:
-    //   - Read this.value to establish dependency
-    //   - Call fn(value) in untracked context (to avoid tracking fn's internals)
-    // TODO: Return the dispose function from batchedEffect
-    throw new Error("TODO: Implement subscribe");
+    // Create an effect using batchedEffect()
+    return batchedEffect(() => {
+      // Read this.value to establish dependency
+      const v = this.value;
+      // Call fn(value) in untracked context (to avoid tracking fn's internals)
+      untracked(() => fn(v));
+    });
   }
 
   /**
@@ -112,6 +138,7 @@ export class AdvancedSignal<T = any> extends BatchedSignal<T> {
    */
   protected _onWatched(): void {
     if (this._watched) {
+      untracked(() => this._watched?.());
       // TODO: Call _watched() hook in untracked context
       // Why untracked? Lifecycle hooks shouldn't create dependencies
     }
@@ -122,6 +149,7 @@ export class AdvancedSignal<T = any> extends BatchedSignal<T> {
    */
   protected _onUnwatched(): void {
     if (this._unwatched) {
+      untracked(() => this?._unwatched?.());
       // TODO: Call _unwatched() hook in untracked context
     }
   }
@@ -144,7 +172,8 @@ export class AdvancedComputedSignal<T>
 
   constructor(computeFn: () => T, options?: SignalOptions<T>) {
     super(computeFn);
-    // TODO: Store lifecycle hooks
+    this._watched = options?.watched;
+    this._unwatched = options?.unwatched;
   }
 
   /**
@@ -152,27 +181,52 @@ export class AdvancedComputedSignal<T>
    */
   peek(): T {
     // TODO: Use untracked() to access this.value
+    return untracked(() => this.value);
     // TODO: This will trigger recomputation if stale, but won't create dependency
-    throw new Error("TODO: Implement computed peek");
+  }
+
+  subscribeEffect(effect: IEffect): () => void {
+    const wasWatched = this._depsHead !== undefined;
+    const unsubscribe = super.subscribeEffect(effect);
+
+    if (!wasWatched && this._watched) {
+      this._onWatched();
+    }
+
+    return () => {
+      unsubscribe();
+      if (this._depsHead === undefined && this._unwatched) {
+        this._onUnwatched();
+      }
+    };
   }
 
   /**
    * subscribe() - Manual subscription to computed signal changes
    */
   subscribe(fn: (value: T) => void): () => void {
-    // TODO: Same as AdvancedSignal.subscribe()
-    throw new Error("TODO: Implement computed subscribe");
+    // TODO: Create an effect using batchedEffect()
+    const e = batchedEffect(() => {
+      //   - Read this.value to establish dependency
+      const v = this.value;
+      //   - Call fn(value) in untracked context (to avoid tracking fn's internals)
+      untracked(() => fn(v));
+    });
+
+    return e;
   }
 
   protected _onWatched(): void {
     if (this._watched) {
       // TODO: Call hook in untracked context
+      untracked(() => this._watched?.());
     }
   }
 
   protected _onUnwatched(): void {
     if (this._unwatched) {
       // TODO: Call hook in untracked context
+      untracked(() => this._unwatched?.());
     }
   }
 }
