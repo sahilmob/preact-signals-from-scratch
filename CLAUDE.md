@@ -546,24 +546,6 @@ Ready to implement comprehensive subscription lifecycle, memory leak prevention,
   - Problem: Eager recomputation during invalidation causes computed signals to read stale dependencies
   - Symptom: In `sig → left/right → bottom`, bottom computes with old right when sig changes
   - Fix: Defer ALL recomputation until after ALL invalidations propagate (lazy evaluation during batch)
-
-**Phase 2-3 Issues:**
-- Infinite loops from immediate effect re-execution
-- Memory leaks from untracked subscriptions
-- Double notifications from calling both parent and child setters
-- Eager recomputation breaking computed signal laziness
-
-**Phase 4 Issues:**
-- Incorrect linked list traversal directions (using `prevSig` when `nextSig` is needed)
-- Broken list chains from improper node removal
-- Only clearing first dependency due to wrong traversal pointer
-- Unnecessary bidirectional links when singly-linked lists suffice (wasted memory)
-
-**Phase 5 Critical Issues:**
-- **Diamond dependency stale value bug** ⭐ (MOST IMPORTANT)
-  - Problem: Eager recomputation during invalidation causes computed signals to read stale dependencies
-  - Symptom: In `sig → left/right → bottom`, bottom computes with old right when sig changes
-  - Fix: Defer ALL recomputation until after ALL invalidations propagate (lazy evaluation during batch)
   - This was a fundamental flaw in Phase 4 that only batching could solve!
 
 - **LIFO execution order** (critical for disposal)
@@ -589,3 +571,29 @@ Ready to implement comprehensive subscription lifecycle, memory leak prevention,
   - Problem: `_clearDependencies()` doesn't reset `_sigsHead` to undefined
   - Symptom: Stale pointer references prevent garbage collection
   - Fix: Always set `_sigsHead = undefined` after clearing
+
+**Phase 6 Issues:**
+- **Using hook existence instead of subscriber count**
+  - Problem: Checking `if (!this._watched)` instead of `if (!wasWatched)`
+  - Symptom: Hook called every time an effect subscribes, not just on 0→1 transition
+  - Fix: Check `this._depsHead !== undefined` to determine if signal already has subscribers
+
+- **Checking subscriber count at wrong time**
+  - Problem: Checking `wasWatched` AFTER calling `super.subscribeEffect()`
+  - Symptom: First subscription shows wasWatched=false, but second shows wasWatched=true incorrectly
+  - Fix: Save `wasWatched` state BEFORE calling `super.subscribeEffect()`
+
+- **Unsubscribe timing for lifecycle hooks**
+  - Problem: Checking `_depsHead === undefined` BEFORE calling `unsubscribe()`
+  - Symptom: `_onUnwatched()` never called because signal still has subscribers
+  - Fix: Call `unsubscribe()` first, THEN check if `_depsHead === undefined`
+
+- **peek() as method call instead of getter**
+  - Problem: `untracked(() => this.value())` - calling value as function
+  - Symptom: TypeError: this.value is not a function
+  - Fix: Use `untracked(() => this.value)` - access as property getter
+
+- **Forgetting guard checks for optional hooks**
+  - Problem: Calling `_onWatched()` even when `this._watched` is undefined
+  - Symptom: Unnecessary function calls, potential errors
+  - Fix: Add `&& this._watched` / `&& this._unwatched` checks before calling hooks
