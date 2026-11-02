@@ -1,3 +1,5 @@
+> Historical exercise guide: includes planned work, not a completion report. See the [repository README](../README.md) and [validation notes](../VALIDATION.md) for current status and working commands.
+
 # My Signals - Learning Signals by Rebuilding from Scratch
 
 This project rebuilds the Preact Signals library from scratch to understand the core concepts and design patterns behind reactive state management.

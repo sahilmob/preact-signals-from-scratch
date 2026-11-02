@@ -3,13 +3,16 @@
   "version": "1.0.0",
   "type": "module",
   "description": "Learning signals by rebuilding from scratch",
-  "main": "src/index.js",
   "scripts": {
-    "test": "vitest",
+    "test": "vitest run",
     "test:watch": "vitest --watch",
-    "benchmark": "node benchmarks/performance.js"
+    "benchmark": "vitest run src/performance-comparison.test.ts src/05-batching-performance.test.ts"
   },
-  "keywords": ["signals", "reactive", "state-management"],
+  "keywords": [
+    "signals",
+    "reactive",
+    "state-management"
+  ],
   "author": "Learning Project",
   "license": "MIT",
   "devDependencies": {
