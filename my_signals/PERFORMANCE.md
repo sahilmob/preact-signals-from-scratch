@@ -1,3 +1,5 @@
+> Historical learning notes: the figures and comparisons below have not been independently revalidated. They are not current benchmark results or evidence of production parity. See [validation notes](../VALIDATION.md).
+
 # Performance Comparison: Phase 3 → Phase 4 → Phase 5
 
 ## Complete Evolution Summary

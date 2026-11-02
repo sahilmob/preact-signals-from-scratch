@@ -1,3 +1,5 @@
+> Historical learning notes: the figures and comparisons below have not been independently revalidated. They are not current benchmark results or evidence of production parity. See [validation notes](../VALIDATION.md).
+
 # Implementation Comparison: Your Signals vs Preact Signals
 
 This document compares your learning implementation with the production Preact Signals library.
